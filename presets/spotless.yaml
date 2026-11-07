@@ -1,0 +1,258 @@
+# Spotless - Martin Garrix & Jay Hardway
+#
+# Timeline reference: `python -m huemusic check spotless`
+# Tempo & grid come from `python -m huemusic analyze "mp3/...Spotless.mp3"`.
+# Section starts were placed from the per-bar energy table; refine them with
+# tap markers (press letters while playing) if something feels early/late.
+
+track:
+  title: Spotless
+  artist: Martin Garrix & Jay Hardway
+  spotify_uri:              # filled automatically on first play
+  duration: 195.08
+  bpm: 128
+  first_beat: 0.128         # time of bar 1, beat 1 (seconds)
+
+palette:
+  deep:    "#06104a"
+  blue:    "#0038ff"
+  ice:     "#a8e4ff"
+  cyan:    "#00d0ff"
+  violet:  "#6a00ff"
+  magenta: "#ff00a8"
+
+# Optional named light groups (channel ids or name fragments), e.g.:
+# groups:
+#   strips: ["strip", "play bar"]
+#   ceiling: [3, 4, 5]
+# Built-in groups: all, left, right, front, back, odd, even
+
+sections:                   # each section lasts until the next one starts
+  pickup:    bar 1
+  intro:     bar 2
+  break1:    bar 11
+  build1:    bar 28
+  drop1:     bar 36
+  silence:   bar 52
+  breakdown: bar 54
+  build2:    bar 70
+  drop2:     bar 78
+  outro:     bar 94
+  fadeout:   bar 102
+
+# Cues are layered in list order: later cues draw on top of earlier ones.
+# blend: over (default, replaces) | add (adds light) | max
+cues:
+  # ------------------------------------------------------------- intro
+  - in: pickup
+    effect: fade
+    from: black
+    to: deep
+
+  - in: intro
+    effect: solid
+    color: deep
+
+  - in: intro                     # kick on every beat
+    effect: pulse
+    color: ice
+    every: 1
+    decay: 0.45
+    intensity: 0.7
+    blend: add
+
+  - in: intro                     # accent on each bar, walking across the room
+    effect: chase
+    color: white
+    every: 4
+    width: 2
+    decay: 0.8
+    blend: add
+
+  # ---------------------------------------------------- melodic break
+  - in: break1
+    effect: breathe
+    color: blue
+    period: 2 bars
+    min: 0.2
+    fade_in: 2 beats
+
+  - in: break1
+    effect: sweep
+    colors: [ice, violet]
+    every: 2 bars
+    width: 0.3
+    direction: bounce
+    intensity: 0.5
+    blend: add
+
+  # ----------------------------------------------------------- build 1
+  - in: build1
+    effect: fade
+    from: deep
+    to: cyan
+    ease: in
+
+  - in: build1                    # accelerating strobe, getting brighter
+    effect: strobe
+    color: white
+    rate: 0.5
+    rate_end: 4
+    duty: 0.3
+    fade_in: 7 bars
+    blend: add
+
+  - at: drop1 - 2 beats           # breath before the drop
+    until: drop1
+    effect: blackout
+
+  # ------------------------------------------------------------ drop 1
+  - in: drop1                     # pumping two-color pulse
+    effect: pulse
+    colors: [cyan, magenta]
+    every: 1
+    decay: 0.8
+    min: 0.15
+
+  - in: drop1                     # white chase on 8th notes
+    effect: chase
+    color: white
+    every: 0.5
+    direction: bounce
+    decay: 0.6
+    intensity: 0.7
+    blend: add
+
+  - at: drop1 + 8 bars            # second half: room halves swap colors
+    until: drop1.end
+    effect: alternate
+    colors: [cyan, violet]
+    every: 1
+    blend: max
+
+  - at: drop1.end - 1 bar         # last bar: fast strobe
+    until: drop1.end
+    effect: strobe
+    rate: 4
+    blend: add
+
+  - at: drop1                     # THE hit
+    dur: 2 beats
+    effect: solid
+    color: white
+    fade_out: 2 beats
+
+  # ----------------------------------------------- silence / breakdown
+  - in: silence
+    effect: fade
+    from: ice
+    to: black
+    ease: out
+
+  - in: breakdown
+    effect: breathe
+    color: violet
+    period: 2 bars
+    min: 0.15
+    fade_in: 1 bar
+
+  - in: breakdown
+    effect: sweep
+    color: cyan
+    every: 1 bar
+    width: 0.25
+    intensity: 0.6
+    blend: add
+
+  - at: breakdown + 8 bars        # second half: sparkles join in
+    until: breakdown.end
+    effect: sparkle
+    color: ice
+    every: 1
+    density: 0.3
+    intensity: 0.6
+    blend: add
+
+  # ----------------------------------------------------------- build 2
+  - in: build2
+    effect: fade
+    from: deep
+    to: magenta
+    ease: in
+
+  - in: build2
+    effect: strobe
+    color: white
+    rate: 0.5
+    rate_end: 6
+    duty: 0.3
+    fade_in: 6 bars
+    blend: add
+
+  - at: drop2 - 2 beats
+    until: drop2
+    effect: blackout
+
+  # ------------------------------------------------------------ drop 2
+  - at: drop2
+    until: drop2 + 8 bars
+    effect: rainbow
+    speed: 2 bars
+    spread: 0.6
+
+  - at: drop2                     # beat pulse on top of the rainbow
+    until: drop2 + 8 bars
+    effect: pulse
+    color: white
+    every: 1
+    decay: 0.35
+    intensity: 0.8
+    blend: add
+
+  - at: drop2 + 8 bars            # second half: magenta / cyan halves
+    until: drop2.end
+    effect: alternate
+    colors: [magenta, cyan]
+    every: 1
+
+  - at: drop2 + 8 bars
+    until: drop2.end
+    effect: sparkle
+    color: white
+    every: 0.25
+    density: 0.25
+    blend: add
+
+  - at: drop2.end - 2 bars        # build into the outro
+    until: drop2.end
+    effect: strobe
+    rate: 2
+    rate_end: 8
+    blend: add
+
+  - at: drop2
+    dur: 2 beats
+    effect: solid
+    color: white
+    fade_out: 2 beats
+
+  # ------------------------------------------------------------- outro
+  - in: outro
+    effect: pulse
+    colors: [cyan, blue]
+    every: 1
+    decay: 0.6
+    min: 0.1
+
+  - in: outro
+    effect: chase
+    color: white
+    every: 2
+    decay: 0.9
+    blend: add
+    intensity: 0.6
+
+  - in: fadeout
+    effect: fade
+    from: deep
+    to: black
