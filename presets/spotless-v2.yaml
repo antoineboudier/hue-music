@@ -39,16 +39,31 @@ cues:
     effect: breathe
     color: blue
     period: 2 bars
-    min: 0.2
+    min: 0.15
+    intensity: 0.6
     fade_in: 2 beats
 
-  - in: break1
-    effect: sweep
-    colors: [ice, violet]
-    every: 2 bars
-    width: 0.3
-    direction: bounce
-    intensity: 0.5
+  # The melody: 6 notes (beats 3, 3.5, 3.75, 4, 4.5, 1) then 1 note on beat 2,
+  # repeating every bar. The 6 notes walk around the room, one light each...
+  - at: bar 12 beat 3
+    until: build1
+    order: circle
+    effect: sequence
+    step: 0.25
+    pattern: "> . > >  > . > .  > . . .  . . . ."
+    color: ice
+    decay: 1.5
+    blend: add
+
+  # ...and the single note lights the whole room
+  - at: bar 12 beat 3
+    until: build1
+    effect: sequence
+    step: 0.25
+    pattern: ". . . .  . . . .  . . . .  A - - ."
+    color: white
+    decay: 1
+    intensity: 0.8
     blend: add
 
   # ----------------------------------------------------------- build 1
@@ -59,7 +74,8 @@ cues:
     ease: in
 
   - in: build1                    # light running around the room, speeding up:
-    order: circle                 # 1 beat -> 1/2 -> 1/4 -> 1/8 (every 2 bars)
+    until: bar 35                 # (stops where the two-note figure starts)
+    order: circle                 # 1 beat -> 1/2 -> 1/4 -> 1/8
     effect: chase
     colors: [ice, white]
     every: 1
@@ -68,9 +84,17 @@ cues:
     tail: 2
     blend: add
 
-  - at: drop1 - 2 beats           # breath before the drop
+  # The two alternating notes just before the drop (1:04 -> 1:06):
+  # left half / right half, on 8th notes. Draft from the audio analysis:
+  # refine it with the studio's tap recording if the rhythm differs.
+  - at: bar 35
     until: drop1
-    effect: blackout
+    effect: sequence
+    step: 0.5
+    pattern: "L R L R L R L R"
+    colors: [ice, white]
+    decay: 0.9
+    background: deep
 
   # ------------------------------------------------------------ drop 1
   - in: drop1                     # pumping two-color pulse

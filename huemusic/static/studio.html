@@ -20,6 +20,7 @@
     --err: #ff5a5a;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; }
   body {
     background: var(--bg); color: var(--text);
@@ -87,6 +88,17 @@
     border: 1px solid var(--line); padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .3s; pointer-events: none;
   }
   #toast.show { opacity: 1; }
+  #liveBtn.on { background: var(--amber); border-color: var(--amber); color: #0e0b1f; font-weight: 600; }
+  #liveDelay { width: 64px; font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+  #recBtn.on { background: var(--err); border-color: var(--err); color: #0e0b1f; font-weight: 600; }
+  #hint.rec { color: var(--err); font-weight: 600; }
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 20px; max-width: min(720px, 92vw); }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+  dialog h3 { margin: 0 0 6px; }
+  dialog p { color: var(--muted); margin: 0 0 10px; font-size: 13px; }
+  dialog pre { background: #07060f; color: var(--cyan); padding: 12px; border-radius: 8px; overflow: auto; font-size: 13px; }
+  dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #0e0b1f; font-weight: 600; }
   @media (max-width: 760px) {
     main { flex-direction: column; flex: none; }
     aside { width: auto; overflow: visible; }
@@ -101,6 +113,10 @@
   <div id="songinfo"></div>
   <div class="spacer"></div>
   <span id="status"></span>
+  <label id="liveDelayWrap" class="check" hidden title="Delay the real lights to match the sound you hear (Bluetooth: try 150-250)">
+    delay <input id="liveDelay" type="number" step="10" value="0"> ms
+  </label>
+  <button id="liveBtn" title="Send the show to the real Hue lights, in sync with this page">Real lights: off</button>
   <button id="refreshLights" title="Re-read light names and positions from the Hue bridge">Refresh lights from bridge</button>
 </header>
 <div id="banner" hidden></div>
@@ -143,10 +159,26 @@
       <option value="16">4 bars</option><option value="8">2 bars</option>
     </select>
   </label>
-  <span class="hint">Space play/pause · ←/→ one bar · click the timeline to seek</span>
+  <button id="recBtn" title="Tap keys in time with the music to write a sequence pattern">● Record taps</button>
+  <label>Snap
+    <select id="snap">
+      <option value="0.25">1/16</option><option value="0.5">1/8</option><option value="1">1/4</option>
+    </select>
+  </label>
+  <span class="hint" id="hint">Space play/pause · ←/→ one bar · click the timeline to seek</span>
 </div>
 <section id="timelineWrap"><canvas id="timeline" aria-label="Color of each light over time"></canvas></section>
 <audio id="audio" preload="auto"></audio>
+<dialog id="tapDialog">
+  <h3>Recorded pattern</h3>
+  <p id="tapInfo"></p>
+  <pre id="tapYaml"></pre>
+  <div class="row">
+    <button id="tapAdd" class="primary">Add to this preset</button>
+    <button id="tapCopy">Copy</button>
+    <button id="tapRedo">Discard</button>
+  </div>
+</dialog>
 <div id="toast"></div>
 
 <script>
@@ -154,7 +186,9 @@
 const $ = (id) => document.getElementById(id);
 const audio = $("audio");
 const roomCv = $("room"), tlCv = $("timeline");
-const LABEL_W = 170, TOP = 46, ROW_H = 22;
+const LABEL_W = 170, TOP = 78, ROW_H = 22;
+const LANE_Y = 32, LANE_H = 28;   // "sounds" track, between the sections band and the light rows
+const TAP_KEYS = { L: "L", R: "R", F: "F", B: "B", A: "A", N: ">", P: "<" };
 
 let show = null;         // data from /api/show
 let frames = null;       // Uint8Array [frame][channel][rgb]
@@ -167,6 +201,8 @@ let hoverX = null, dragging = false;
 let wholeImg = null;     // cached heatmap of the whole song
 let editing = false;     // position edit mode
 let drag = null;         // light being dragged in edit mode
+let notes = null, noteNames = [], notesMsg = "";  // detected sounds
+let recording = false, taps = [];                 // tap recording
 
 // ------------------------------------------------------------ utilities
 const fmt = (t, dec = 2) => {
@@ -217,6 +253,7 @@ function seek(t) {
   t = Math.max(0, Math.min(show ? show.duration : 0, t));
   anchorT = t; anchorWall = performance.now(); lastAudio = t;
   if (show && show.audio) audio.currentTime = t;
+  liveState();
 }
 function setPlaying(p) {
   if (!show) return;
@@ -229,7 +266,40 @@ function setPlaying(p) {
     if (p) { audio.currentTime = t; audio.play().catch((e) => { toast("Audio couldn't start: " + e.message); }); }
     else audio.pause();
   }
+  liveState();
 }
+
+// ------------------------------------------------------------ real lights
+// The server renders and streams; we only tell it where playback is.
+let live = false, liveTimer = null;
+function liveState() {
+  if (!live || !show) return;
+  fetch("/api/live/state", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ preset: show.name, t: now(), playing, rate, offset: +$("liveDelay").value || 0 }),
+  }).then((r) => r.json()).then((d) => { if (live && !d.on) setLive(false, d.error || "The real lights stopped"); }).catch(() => {});
+}
+async function setLive(on, reason) {
+  const btn = $("liveBtn");
+  if (on) {
+    btn.disabled = true; btn.textContent = "Connecting…";
+    const d = await post("/api/live/start", { preset: show.name }, "Couldn't start the real lights");
+    btn.disabled = false;
+    if (d) {
+      live = true;
+      liveTimer = setInterval(liveState, 250);
+      liveState();
+      toast(`Real lights on: streaming to “${d.area}”`);
+    }
+  } else {
+    live = false; clearInterval(liveTimer);
+    if (reason) toast(reason); else await post("/api/live/stop", {}, "Couldn't stop the lights");
+  }
+  btn.classList.toggle("on", live);
+  btn.textContent = live ? "● Real lights: on" : "Real lights: off";
+  $("liveDelayWrap").hidden = !live;
+}
+window.addEventListener("pagehide", () => { if (live) navigator.sendBeacon("/api/live/stop"); });
 
 // ------------------------------------------------------------ loading
 async function loadPresets() {
@@ -291,6 +361,8 @@ async function loadShow(name, keepTime) {
     if (show.audio) { audio.src = "/api/audio?preset=" + encodeURIComponent(name); audio.load(); }
     else { audio.removeAttribute("src"); audio.load(); }
     history.replaceState(null, "", "?preset=" + encodeURIComponent(name));
+    taps = [];
+    loadNotes(name);
   }
   seek(Math.min(t, show.duration));
   if (playing && show.audio) audio.play().catch(() => {});
@@ -300,6 +372,18 @@ async function loadShow(name, keepTime) {
   if (!show.editable && editing) setEditing(false);
   updateDirty();
   resize();
+  liveState();  // switch the real lights to this preset / version
+}
+
+async function loadNotes(name) {
+  notes = null; notesMsg = show.audio ? "analyzing sounds…" : "no audio";
+  if (!show.audio) return;
+  try {
+    const r = await fetch("/api/notes?preset=" + encodeURIComponent(name));
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    if (show && show.name === name) { notes = d.notes; noteNames = d.names; }
+  } catch (e) { notesMsg = "sounds unavailable"; toast("Sound detection failed: " + e.message); }
 }
 
 // ------------------------------------------------------------ room view
@@ -537,6 +621,43 @@ function drawTimeline(t) {
     if (b - a > ctx.measureText(s.name).width + 10) { ctx.fillStyle = "#0e0b1f"; ctx.fillText(s.name, a + 5, 17); }
   }
 
+  // sounds track: one tick per detected sound (height = strength, color = pitch)
+  const bl0 = beatLen(), pxBeat = bl0 / (t1 - t0) * plotW;
+  ctx.fillStyle = "#120f27"; ctx.fillRect(LABEL_W, LANE_Y, plotW, LANE_H);
+  if (pxBeat >= 8) {  // beat grid (16ths too when zoomed in a lot)
+    const sub = pxBeat >= 48 ? 0.25 : 1;
+    const first = Math.ceil((t0 - show.first_beat) / bl0 / sub) * sub;
+    for (let b = first; show.first_beat + b * bl0 <= t1; b += sub) {
+      const x = X(show.first_beat + b * bl0), onBar = Math.abs(b / 4 - Math.round(b / 4)) < 1e-6;
+      const onBeat = Math.abs(b - Math.round(b)) < 1e-6;
+      ctx.fillStyle = onBar ? "rgba(255,255,255,0.28)" : onBeat ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)";
+      ctx.fillRect(x, LANE_Y, 1, LANE_H);
+    }
+  }
+  ctx.font = "11px system-ui, sans-serif"; ctx.textAlign = "left"; ctx.fillStyle = "#a9a3cf";
+  ctx.fillText(notes ? "sounds" : notesMsg, 10, LANE_Y + LANE_H / 2);
+  if (notes) {
+    const w = t1 - t0 > 60 ? 1 : 2;
+    for (const n of notes) {
+      if (n.t < t0 || n.t > t1) continue;
+      const h = 4 + (LANE_H - 6) * n.s;
+      ctx.globalAlpha = 0.35 + 0.65 * n.s;
+      ctx.fillStyle = `hsl(${n.pc * 30}, 90%, 62%)`;
+      ctx.fillRect(X(n.t) - w / 2, LANE_Y + LANE_H - 2 - h, w, h);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // recorded taps: white markers with their symbol
+  ctx.font = "600 10px system-ui, sans-serif"; ctx.textAlign = "center";
+  for (const tp of taps) {
+    if (tp.t < t0 || tp.t > t1) continue;
+    const x = X(tp.t);
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath(); ctx.moveTo(x - 4, LANE_Y); ctx.lineTo(x + 4, LANE_Y); ctx.lineTo(x, LANE_Y + 6); ctx.fill();
+    if (pxBeat >= 20) ctx.fillText(tp.tok, x, LANE_Y + 15);
+  }
+  ctx.textAlign = "left";
+
   // light rows
   const rowsTop = TOP, rowsH = nCh * ROW_H;
   let img;
@@ -584,7 +705,14 @@ function drawTimeline(t) {
     const ht = t0 + (hoverX - LABEL_W) / plotW * (t1 - t0);
     ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.fillRect(hoverX, rowsTop, 1, rowsH);
     const [b, bt] = barBeat(ht), s = sectionAt(ht);
-    const txt = `${fmt(ht)} · bar ${b}.${bt}${s ? " · " + s.name : ""}`;
+    let note = "";
+    if (notes) {  // nearest detected sound within a few pixels
+      const tol = 6 / plotW * (t1 - t0);
+      let best = null;
+      for (const n of notes) if (Math.abs(n.t - ht) <= tol && (!best || Math.abs(n.t - ht) < Math.abs(best.t - ht))) best = n;
+      if (best) note = ` · sound ${noteNames[best.pc]} at ${fmt(best.t)}`;
+    }
+    const txt = `${fmt(ht)} · bar ${b}.${bt}${s ? " · " + s.name : ""}${note}`;
     ctx.font = "11px system-ui, sans-serif"; ctx.textAlign = "right"; ctx.fillStyle = "#ffffff";
     ctx.fillText(txt, LABEL_W + plotW, rowsTop + rowsH + 12);
   }
@@ -693,7 +821,10 @@ function loop() {
 
 // ------------------------------------------------------------ controls
 $("play").onclick = () => { if (show) { if (!playing && now() >= show.duration - 0.05) seek(0); setPlaying(!playing); } };
-$("speed").onchange = (e) => { const t = now(); rate = +e.target.value; audio.playbackRate = rate; anchorT = t; anchorWall = performance.now(); };
+$("speed").onchange = (e) => { const t = now(); rate = +e.target.value; audio.playbackRate = rate; anchorT = t; anchorWall = performance.now(); liveState(); };
+$("liveBtn").onclick = () => { if (show) setLive(!live); };
+try { $("liveDelay").value = localStorage.getItem("huemusic.liveDelay") || "0"; } catch (e) { /* storage unavailable */ }
+$("liveDelay").onchange = () => { try { localStorage.setItem("huemusic.liveDelay", $("liveDelay").value); } catch (e) {} liveState(); };
 $("zoom").onchange = () => { wholeImg = null; };
 $("preset").onchange = (e) => loadShow(e.target.value, false);
 $("refreshLights").onclick = async () => {
@@ -723,8 +854,75 @@ $("resetBtn").onclick = async () => {
   if (show.positions_modified && !confirm("Discard your local changes and reload the positions from the bridge?")) return;
   if (await post("/api/refresh-lights", {}, "Couldn't reach the bridge")) { toast("Positions reloaded from the bridge"); await loadShow(show.name, true); }
 };
+// ------------------------------------------------------------ tap recording
+function setRecording(on) {
+  recording = on;
+  $("recBtn").classList.toggle("on", on);
+  $("recBtn").textContent = on ? "■ Stop recording" : "● Record taps";
+  $("hint").classList.toggle("rec", on);
+  $("hint").textContent = on
+    ? "Recording: tap L R (halves) · F B · A (all) · 1-9 (light #) · N (next light) · P (previous)"
+    : "Space play/pause · ←/→ one bar · click the timeline to seek";
+  if (on) { taps = []; if (!playing) setPlaying(true); }
+  else if (taps.length) showPattern();
+}
+
+const fmtNum = (v) => String(+v.toFixed(3));
+
+function buildPattern() {
+  const step = +$("snap").value, bl = beatLen();
+  const slots = taps.map((tp) => ({ g: Math.round((tp.t - show.first_beat) / bl / step), tok: tp.tok }));
+  const g0 = Math.min(...slots.map((s) => s.g)), g1 = Math.max(...slots.map((s) => s.g));
+  const toks = Array(g1 - g0 + 1).fill(".");
+  for (const s of slots) {
+    const cur = toks[s.g - g0];
+    if (cur === ".") toks[s.g - g0] = s.tok;
+    else if (!cur.split("+").includes(s.tok)) toks[s.g - g0] = cur + "+" + s.tok;
+  }
+  // group symbols by beat for readability (spaces are ignored by the parser)
+  const perBeat = Math.max(1, Math.round(1 / step));
+  const pattern = toks.map((t, i) => (i > 0 && i % perBeat === 0 ? " " : "") + t).join(" ");
+  const b = g0 * step, bar = Math.floor(b / 4) + 1, beat = b - (bar - 1) * 4 + 1;
+  const at = Math.abs(beat - 1) < 1e-6 ? `bar ${bar}` : `bar ${bar} beat ${fmtNum(beat)}`;
+  const usesPath = toks.some((t) => /[0-9<>]/.test(t));
+  const lines = [
+    `  - at: ${at}                # recorded in the studio`,
+    `    dur: ${fmtNum(toks.length * step)} beats          # lengthen it to repeat the pattern`,
+    `    effect: sequence`,
+    ...(usesPath ? [`    order: circle`] : []),
+    `    step: ${fmtNum(step)}`,
+    `    pattern: "${pattern}"`,
+    `    color: white`,
+    `    blend: add`,
+  ];
+  return { yaml: lines.join("\n"), count: taps.length, at };
+}
+
+function showPattern() {
+  const p = buildPattern();
+  $("tapInfo").textContent = `${p.count} taps, snapped to ${$("snap").selectedOptions[0].text} notes, starting at ${p.at}. ` +
+    `"Add" appends it to ${show.name}.yaml; the page reloads with it.`;
+  $("tapYaml").textContent = p.yaml;
+  $("tapDialog").showModal();
+}
+
+$("recBtn").onclick = () => setRecording(!recording);
+$("tapCopy").onclick = async () => {
+  try { await navigator.clipboard.writeText($("tapYaml").textContent); toast("Copied"); } catch (e) { toast("Copy failed: select the text instead"); }
+};
+$("tapRedo").onclick = () => { $("tapDialog").close(); taps = []; };
+$("tapAdd").onclick = async () => {
+  const d = await post("/api/append-cue", { preset: show.name, yaml: $("tapYaml").textContent }, "Couldn't add it");
+  if (d) { $("tapDialog").close(); taps = []; toast(`Added: ${show.name} now has ${d.cues} cues`); await loadShow(show.name, true); }
+};
+
 window.addEventListener("keydown", (e) => {
-  if (!show || e.target.tagName === "SELECT") return;
+  if (!show || e.target.tagName === "SELECT" || $("tapDialog").open) return;
+  if (recording && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const k = e.key.toUpperCase();
+    const tok = TAP_KEYS[k] || (/^[1-9]$/.test(k) ? k : null);
+    if (tok) { e.preventDefault(); if (!e.repeat) taps.push({ t: now(), tok }); return; }
+  }
   if (e.code === "Space") { e.preventDefault(); $("play").click(); }
   else if (e.code === "ArrowRight") { e.preventDefault(); seek(now() + 4 * beatLen()); }
   else if (e.code === "ArrowLeft") { e.preventDefault(); seek(now() - 4 * beatLen()); }

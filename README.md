@@ -86,6 +86,17 @@ This opens a page in your browser showing:
 
 You can play, pause, seek, slow down (down to 0.25×) and zoom in to a few bars. Click a light to see which cues drive it. Keep the page open while you edit a preset: it refreshes when you save.
 
+**Real lights:**
+- **Real lights: on** (top right) sends the show to your Hue lights, in sync with the page's playback, including when you pause, seek or slow down.
+- If the lights run ahead of the sound you hear, raise **delay** (Bluetooth: about 150–250 ms).
+- Edits are applied live: saving the preset, switching version, moving a light.
+- Closing the page, or stopping the studio with Ctrl+C, turns the stream off.
+
+**Following a melody:**
+- The timeline's **sounds** track shows where each sound starts, colored by pitch.
+- **● Record taps** lets you tap keys in time with the music (`L`/`R` halves, `A` all, `1`–`9` a light, `N` next light). The taps become a `sequence` cue, snapped to the grid, which you can add to the preset in one click.
+- See [Follow a melody](docs/creating-a-preset.md#follow-a-melody).
+
 **Editing light positions:** click **Edit positions**, then:
 - drag the lights; the numbered arrows show the order a circle will follow;
 - click a light without dragging to make the real one blink;

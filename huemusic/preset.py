@@ -266,6 +266,16 @@ def load(path: str | Path) -> Preset:
             return parse_beats(v, grid)
         if kind == "float":
             return float(v)
+        if kind == "str":
+            return str(v)
+        if kind == "bool":
+            if isinstance(v, bool):
+                return v
+            if str(v).lower() in ("yes", "true", "on", "1"):
+                return True
+            if str(v).lower() in ("no", "false", "off", "0"):
+                return False
+            raise PresetError(f"{v!r} is not yes/no")
         if kind.startswith("choice:"):
             options = kind[7:].split("|")
             if str(v) not in options:

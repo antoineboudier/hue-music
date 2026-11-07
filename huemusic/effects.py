@@ -12,6 +12,7 @@ from __future__ import annotations
 import colorsys
 import math
 import random
+import re
 from dataclasses import dataclass
 from typing import Callable
 
@@ -117,7 +118,7 @@ def effect(name: str) -> Callable[[type["Effect"]], type["Effect"]]:
 class Effect:
     """Base class. PARAMS maps parameter name -> (kind, default).
 
-    kinds: color, colors (one color or a list), beats, float,
+    kinds: color, colors (one color or a list), beats, float, str, bool,
            choice:a|b|c
     """
     name = "?"
@@ -388,6 +389,121 @@ class Sparkle(Effect):
         out = self._bg(ctx)
         for c in rng.sample(chs, min(count, len(chs))):
             out[c.id] = scale(colors[rng.randrange(len(colors))], level)
+        return out
+
+
+@effect("sequence")
+class Sequence(Effect):
+    """A hand-written rhythm, like a drum-machine pattern: one symbol per step.
+
+        pattern: "1 . 2 3 4 . 5 . 6 . . . A . . ."
+        step: 0.25            # beats per symbol (0.25 = 16th notes)
+
+    Symbols (combine several in one step with +, e.g. L+5):
+        .      nothing          -      hold the previous hit one more step
+        A      all lights       L R    left / right half of the room
+        F B    front / back half
+        1..N   the Nth light along the cue's `order` path
+        >  <   next / previous light along the path (keeps counting across
+               repeats, so a phrase walks around the room)
+    Each hit flashes and fades over its length (`decay`). The pattern repeats
+    until the cue ends (`repeat: false` plays it once). `color` can be a list,
+    cycled hit by hit.
+    """
+    PARAMS = {
+        "pattern": ("str", None),
+        "step": ("beats", 0.5),
+        "color": ("colors", "white"),
+        "decay": ("float", 0.8),     # fraction of the hit's length to fade out; 0 = hard on/off
+        "repeat": ("bool", True),
+        "background": ("color", None),
+    }
+    _PART = re.compile(r"^(?:[ALRFB<>]|\d+)$")
+
+    def __init__(self, params, parse):
+        super().__init__(params, parse)
+        pat = (self.p["pattern"] or "").strip()
+        if not pat:
+            raise ValueError('sequence needs a pattern, e.g. pattern: "1 . 2 . A . . ."')
+        tokens = pat.split() if any(ch.isspace() for ch in pat) else list(pat)
+        self.tokens: list[list[str] | None] = []  # parts per step; None = rest, [] = hold
+        for tok in (t.upper() for t in tokens):
+            if tok == ".":
+                self.tokens.append(None)
+            elif tok == "-":
+                self.tokens.append([])
+            else:
+                parts = tok.split("+")
+                bad = [p for p in parts if not self._PART.match(p) or p == "0"]
+                if bad:
+                    raise ValueError(f"unknown symbol {tok!r} in pattern (use . - A L R F B 1-9 > < and +)")
+                self.tokens.append(parts)
+        # which hit owns each step (holds extend the previous hit), and hit lengths
+        n = len(self.tokens)
+        self.owner: list[int | None] = [None] * n
+        self.length: dict[int, int] = {}
+        last = None
+        for i, t in enumerate(self.tokens):
+            if t is None:
+                last = None
+            elif not t:  # hold
+                if last is not None:
+                    self.owner[i] = last
+                    self.length[last] += 1
+            else:
+                self.owner[i] = last = i
+                self.length[i] = 1
+        self.hit_no = {i: k for k, i in enumerate(sorted(self.length))}
+        # cursor for > / <: value after each part, within one cycle
+        self.cursor: dict[tuple[int, int], int] = {}
+        c = 0
+        for i, t in enumerate(self.tokens):
+            for j, part in enumerate(t or []):
+                if part in "<>":
+                    c += 1 if part == ">" else -1
+                    self.cursor[(i, j)] = c
+        self.cursor_per_cycle = c
+
+    def _lights(self, i: int, cycle: int, ctx: Ctx) -> list[Channel]:
+        chs = ctx.channels
+        n = len(chs)
+        out: dict[int, Channel] = {}
+        for j, part in enumerate(self.tokens[i] or []):
+            if part == "A":
+                sel = chs
+            elif part in "LRFB":
+                key = (lambda c: (c.x, c.id)) if part in "LR" else (lambda c: (-c.y, c.id))
+                ordered = sorted(chs, key=key)
+                half = (n + 1) // 2
+                sel = ordered[:half] if part in "LF" else ordered[half:]
+            elif part in "<>":
+                pos = cycle * self.cursor_per_cycle + self.cursor[(i, j)]
+                sel = [chs[(pos - 1) % n]]
+            else:
+                sel = [chs[(int(part) - 1) % n]]
+            for c in sel:
+                out[c.id] = c
+        return list(out.values())
+
+    def render(self, ctx):
+        n = len(self.tokens)
+        if not ctx.channels:
+            return {}
+        k = ctx.beat / self.p["step"]
+        i = math.floor(k)
+        cycle, idx = divmod(i, n)
+        own = self.owner[idx] if i >= 0 else None
+        if own is None or (cycle > 0 and not self.p["repeat"]):
+            return self._bg(ctx)
+        start = i - (idx - own)
+        phase = (k - start) / self.length[own]
+        decay = self.p["decay"]
+        level = 1.0 if decay <= 0 else max(0.0, 1.0 - phase / decay) ** 2
+        colors = self.p["color"]
+        color = scale(colors[(cycle * len(self.length) + self.hit_no[own]) % len(colors)], level)
+        out = self._bg(ctx)
+        for c in self._lights(own, cycle, ctx):
+            out[c.id] = color
         return out
 
 

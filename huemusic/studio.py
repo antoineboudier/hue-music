@@ -19,6 +19,9 @@ Endpoints (all local):
   POST /api/positions         save edited positions locally (config.json)
   POST /api/push-positions    write the local positions to the bridge's area
   POST /api/identify          blink the real light behind a channel
+  GET  /api/notes?preset=x    detected sounds (start time, strength, pitch class), cached
+  POST /api/append-cue        append a cue (from tap recording) to a preset file
+  POST /api/live/start|state|stop   drive the real lights from the page's playback
 """
 from __future__ import annotations
 
@@ -27,6 +30,7 @@ import json
 import mimetypes
 import re
 import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -194,6 +198,162 @@ def identify(channel_id: int) -> dict:
     return {"ok": True}
 
 
+def notes(name: str) -> dict:
+    from .notes import PITCH_NAMES, notes_for
+
+    path = audio_file(load(preset_file(name)))
+    if path is None:
+        raise NotFound("this preset has no audio file (track.audio)")
+    return {"notes": notes_for(path), "names": PITCH_NAMES}
+
+
+def append_cue(name: str, snippet: str) -> dict:
+    """Append a cue (YAML list item, indented under `cues:`) to the end of a preset file.
+
+    The file is re-loaded afterwards; if it doesn't have exactly one more cue
+    (e.g. `cues:` isn't the last section), the original file is restored.
+    """
+    import yaml
+
+    path = preset_file(name)
+    original = path.read_text(encoding="utf-8")
+    before = len(load(path).cues)
+    own = yaml.safe_load(original) or {}
+    text = re.sub(r"(?m)^cues:\s*\[\]\s*$", "cues:", original).rstrip("\n") + "\n"
+    if "cues" not in own:
+        text += "\ncues:\n"
+    text += "\n" + snippet.rstrip("\n") + "\n"
+    path.write_text(text, encoding="utf-8")
+    try:
+        after = len(load(path).cues)
+        if after != before + 1:
+            raise PresetError("couldn't add the cue at the end of the file (is `cues:` the last section?): paste it by hand")
+    except PresetError:
+        path.write_text(original, encoding="utf-8")
+        raise
+    return {"cues": after}
+
+
+class Live:
+    """Drives the real lights from the studio page.
+
+    The page reports its playback position (on play/pause/seek, and as a
+    heartbeat 4 times a second). A background thread extrapolates the
+    position between reports, renders 50 frames per second with the same
+    engine as `play`, and streams them to the bridge. If the page stops
+    reporting for 3 seconds (closed tab, stopped server), streaming stops.
+    """
+
+    FPS = 50
+    TIMEOUT = 3.0
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.stream = None
+        self.thread: threading.Thread | None = None
+        self.stop_evt = threading.Event()
+        self.show: Show | None = None
+        self.key = None  # (preset, preset mtime, config mtime) the show was built from
+        self.t = 0.0
+        self.wall = 0.0
+        self.playing = False
+        self.rate = 1.0
+        self.offset = 0.0
+        self.last_seen = 0.0
+        self.brightness = 1.0
+        self.error: str | None = None
+
+    def _build(self, name: str) -> None:
+        cfg_mtime = config.CONFIG_PATH.stat().st_mtime if config.CONFIG_PATH.exists() else 0
+        key = (name, preset_mtime(name), cfg_mtime)
+        if key != self.key:
+            preset = load(preset_file(name))
+            cfg = config.load()
+            self.show = Show(preset, config.channels(cfg))
+            self.brightness = float(cfg["playback"].get("brightness", 1.0))
+            self.key = key
+
+    def start(self, name: str) -> dict:
+        from .hue import EntertainmentStream
+
+        with self.lock:
+            self._build(name)
+            if self.stream is None:
+                cfg = config.load()
+                if not config.hue_ready(cfg):
+                    raise NotFound("Hue isn't set up: run `python -m huemusic setup-hue` first")
+                h = cfg["hue"]
+                stream = EntertainmentStream(h["bridge_ip"], h["app_key"], h["client_key"], h["entertainment_id"])
+                stream.open()
+                self.stream = stream
+                self.stop_evt = threading.Event()
+                self.thread = threading.Thread(target=self._loop, daemon=True)
+                self.thread.start()
+            self.error = None
+            self.last_seen = time.monotonic()
+            return {"on": True, "area": config.load()["hue"].get("entertainment_name")}
+
+    def update(self, name: str, t: float, playing: bool, rate: float, offset_ms: float) -> dict:
+        with self.lock:
+            if self.stream is None:
+                return {"on": False, "error": self.error}
+            try:
+                self._build(name)  # follows preset edits and position changes
+            except PresetError:
+                pass  # keep showing the last version that loaded
+            self.t, self.wall = float(t), time.monotonic()
+            self.playing, self.rate = bool(playing), float(rate)
+            self.offset = float(offset_ms) / 1000
+            self.last_seen = self.wall
+            return {"on": True}
+
+    def _loop(self) -> None:
+        period = 1.0 / self.FPS
+        nxt = time.monotonic()
+        while not self.stop_evt.is_set():
+            with self.lock:
+                now = time.monotonic()
+                if now - self.last_seen > self.TIMEOUT:
+                    self.error = "stopped: the studio page stopped reporting"
+                    break
+                t = self.t + ((now - self.wall) * self.rate if self.playing else 0.0) - self.offset
+                frame, _ = self.show.render(t)
+                stream, brightness = self.stream, self.brightness
+            try:
+                stream.send(frame, brightness)
+            except Exception as e:
+                self.error = f"stream error: {e}"
+                break
+            nxt += period
+            delay = nxt - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+            else:
+                nxt = time.monotonic()
+        self._close()
+
+    def _close(self) -> None:
+        with self.lock:
+            stream, self.stream = self.stream, None
+        if stream is not None:
+            try:
+                stream.send({c.id: (0.0, 0.0, 0.0) for c in self.show.channels})
+            except Exception:
+                pass
+            stream.close()
+
+    def stop(self) -> dict:
+        self.stop_evt.set()
+        th = self.thread
+        if th is not None and th.is_alive() and th is not threading.current_thread():
+            th.join(timeout=2)
+        self._close()
+        return {"on": False}
+
+
+LIVE = Live()
+
+
 def parse_range(header: str | None, size: int) -> tuple[int, int] | None:
     """'bytes=START-END' -> (start, end) inclusive, or None for the whole file."""
     m = re.fullmatch(r"bytes=(\d*)-(\d*)", (header or "").strip())
@@ -254,6 +414,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(render_show(name))
             elif url.path == "/api/mtime":
                 self._json({"mtime": preset_mtime(name)})
+            elif url.path == "/api/notes":
+                self._json(notes(name))
             elif url.path == "/api/audio":
                 self._audio(name)
             else:
@@ -273,6 +435,11 @@ class Handler(BaseHTTPRequestHandler):
             "/api/positions": lambda: save_positions(body().get("positions", {})),
             "/api/push-positions": lambda: push_positions(),
             "/api/identify": lambda: identify(int(body()["channel"])),
+            "/api/append-cue": lambda: (lambda b: append_cue(b["preset"], b["yaml"]))(body()),
+            "/api/live/start": lambda: LIVE.start(body()["preset"]),
+            "/api/live/state": lambda: (lambda b: LIVE.update(b["preset"], b["t"], b["playing"],
+                                                              b.get("rate", 1), b.get("offset", 0)))(body()),
+            "/api/live/stop": lambda: LIVE.stop(),
         }
         if path in routes:
             self._guard(lambda: self._json(routes[path]()))
@@ -316,4 +483,5 @@ def serve(preset: str | None = None, port: int = 8765, open_browser: bool = True
     except KeyboardInterrupt:
         pass
     finally:
+        LIVE.stop()  # turn the stream off cleanly
         server.server_close()

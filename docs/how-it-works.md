@@ -271,6 +271,34 @@ file with no external libraries.
   every second, and re-renders when it changes. If the new version has an
   error, the message is shown and the last working version stays
   displayed.
+- **Sounds track.** [`notes.py`](../huemusic/notes.py) runs once per song
+  and caches its result in `analysis/<song>.notes.json`:
+  1. It removes the drums (harmonic/percussive separation).
+  2. It finds where sounds start in what remains (onset detection).
+  3. It gives each one a strength and the dominant pitch class (chroma).
+
+  The page draws one tick per sound.
+- **Tap recording.**
+  - Key presses are stamped with the playback position.
+  - Each is snapped to the nearest step of the chosen grid (1/16, 1/8 or
+    1/4 beat, counted from `first_beat`). Taps in the same slot are joined
+    with `+`.
+  - The page writes a `sequence` cue starting at the first tap's
+    bar/beat.
+  - **Add** sends the cue to `POST /api/append-cue`, which appends it to
+    the preset file. It then re-loads the file to check there is exactly
+    one more cue, and restores the original file otherwise.
+- **Real lights from the studio.** The server's `Live` object owns the
+  Entertainment stream. The page doesn't send colors, only its playback
+  position:
+  - it reports the position, play/pause state and speed on every change,
+    and as a heartbeat 4 times a second;
+  - a server thread extrapolates the position between reports, renders 50
+    frames per second with the same `Show` as `play`, and sends them;
+  - the show is rebuilt when the preset (or its base) or `config.json`
+    changes;
+  - if no report arrives for 3 s, the thread blacks out the lights and
+    closes the stream.
 - **Refresh lights.** This re-reads the entertainment area from the bridge
   (names and positions) into `config.json`. That's the same data
   `setup-hue` saves, without re-pairing.

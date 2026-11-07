@@ -269,6 +269,86 @@ def test_based_on_errors(tmp_path):
         preset.load(tmp_path / "c.yaml")
 
 
+def _lit(show, t, thr=0.05):
+    return sorted(k for k, v in show.render(t)[0].items() if max(v) > thr)
+
+
+def test_sequence_effect(tmp_path):
+    # 120 BPM, step 0.5 beat = 0.25 s per symbol
+    p = preset.load(_write(tmp_path, """
+cues:
+  - {at: 1, dur: 3, order: circle, effect: sequence, step: 0.5, pattern: "> . > - . A . .", decay: 0}
+  - {at: 4, dur: 1, effect: sequence, step: 0.5, pattern: "L R", repeat: no}
+"""))
+    chs = [Channel(0, "front", 0, 1), Channel(1, "right", 1, 0), Channel(2, "back", 0, -1), Channel(3, "left", -1, 0)]
+    s = engine.Show(p, chs)
+    t = lambda step: 1 + step * 0.25 + 0.01
+    assert _lit(s, t(0)) == [0]            # first > : first light around the circle
+    assert _lit(s, t(1)) == []             # rest
+    assert _lit(s, t(2)) == [1] == _lit(s, t(3))  # next light, held one more step
+    assert _lit(s, t(5)) == [0, 1, 2, 3]   # A
+    assert _lit(s, t(8)) == [2]            # 2nd pass: > keeps counting around the room
+    # L then R: halves by x (left=-1, then front/back at x=0 by id, then right)
+    assert _lit(s, 4.01) == [0, 3] and _lit(s, 4.26) == [1, 2]
+    assert _lit(s, 4.51) == []             # repeat: no
+
+
+def test_sequence_rejects_unknown_symbols(tmp_path):
+    with pytest.raises(preset.PresetError, match="unknown symbol"):
+        preset.load(_write(tmp_path, 'cues:\n  - {at: 0, dur: 1, effect: sequence, pattern: "1 X 2"}\n'))
+
+
+def test_studio_append_cue(tmp_path, monkeypatch):
+    from huemusic import studio
+
+    monkeypatch.setattr(config, "PRESETS_DIR", tmp_path)
+    f = tmp_path / "song.yaml"
+    f.write_text("track: {bpm: 120}\ncues:\n  - {at: 0, dur: 1, effect: solid}\n")
+    snippet = '  - at: bar 2\n    dur: 2 beats\n    effect: sequence\n    pattern: "L R"\n'
+    assert studio.append_cue("song", snippet) == {"cues": 2}
+    # a file where cues isn't the last section: refused, and left untouched
+    g = tmp_path / "other.yaml"
+    original = "cues:\n  - {at: 0, dur: 1, effect: solid}\ntrack: {bpm: 120}\n"
+    g.write_text(original)
+    with pytest.raises(preset.PresetError):
+        studio.append_cue("other", snippet)
+    assert g.read_text() == original
+
+
+def test_studio_live_streams_and_times_out(monkeypatch):
+    import time as _time
+
+    from huemusic import studio
+
+    sent, closed = [], []
+
+    class FakeStream:
+        def __init__(self, *a):
+            pass
+
+        def open(self):
+            pass
+
+        def send(self, frame, brightness=1.0):
+            sent.append(frame)
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(hue, "EntertainmentStream", FakeStream)
+    monkeypatch.setattr(config, "hue_ready", lambda cfg: True)
+    live = studio.Live()
+    live.TIMEOUT = 0.4
+    assert live.start("spotless")["on"]
+    live.update("spotless", 66.0, True, 0.5, 100)   # drop 1, half speed, lights delayed 100 ms
+    _time.sleep(0.2)
+    assert len(sent) >= 5
+    assert live.t == 66.0 and live.rate == 0.5 and abs(live.offset - 0.1) < 1e-9
+    _time.sleep(0.6)                                  # no heartbeat -> stops by itself
+    assert closed and live.stream is None
+    assert live.update("spotless", 0, False, 1, 0) == {"on": False, "error": live.error}
+
+
 def test_write_spotify_uri(tmp_path):
     p = tmp_path / "x.yaml"
     p.write_text("track:\n  spotify_uri:              # filled automatically\n  bpm: 1\n")

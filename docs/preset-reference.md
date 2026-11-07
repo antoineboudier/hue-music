@@ -161,6 +161,46 @@ scrambled, either fix the positions in the Hue app's entertainment area
 | `breathe` | `color`, `period` 4, `min` 0.1 | slow sine brightness |
 | `sparkle` | `color(s)`, `every` 0.5, `density` 0.3, `decay` 1, `background` | random lights flash each step; `density` = fraction of lights |
 | `alternate` | `colors` [white, black], `every` 1, `split` left_right/odd_even | the two halves of the path swap colors every step |
+| `sequence` | `pattern` (required), `step` 0.5, `color(s)`, `decay` 0.8, `repeat` yes, `background` | a hand-written rhythm, one symbol per step (see below) |
+
+### `sequence`: follow a melody
+
+`sequence` is how you follow a specific rhythm, such as a melody, a vocal
+chop or a riff. You write it like a drum-machine pattern, with one symbol
+per `step` beats:
+
+```yaml
+  - at: bar 12 beat 3
+    until: build1
+    order: circle
+    effect: sequence
+    step: 0.25                                  # one symbol = a 16th note
+    pattern: "> . > >  > . > .  > . . .  A - - ."
+```
+
+| symbol | lights |
+|---|---|
+| `.` | nothing (rest) |
+| `-` | hold the previous hit one more step (it fades over its whole length) |
+| `A` | all lights |
+| `L` / `R` | left / right half of the room |
+| `F` / `B` | front / back half |
+| `1`, `2`, ... | the 1st, 2nd... light along the cue's `order` path |
+| `>` / `<` | the next / previous light along the path. The count continues across repeats, so a repeated phrase walks around the room |
+| `L+3` | several at once |
+
+- **Spaces:** symbols can be separated by spaces, and extra spaces (for
+  example between beats) are ignored. A pattern without any space is read
+  one character per step.
+- **Repeats:** the pattern repeats until the cue ends; `repeat: no` plays
+  it once.
+- **Colors:** with a color list, hits cycle through the colors.
+- **Different colors per symbol:** use two cues with complementary
+  patterns.
+
+You don't have to count the steps yourself: the studio's **Record taps**
+writes the pattern for you (see
+[Creating a preset](creating-a-preset.md#follow-a-melody)).
 
 `direction` also accepts `right`/`left` as aliases of `forward`/`backward`.
 

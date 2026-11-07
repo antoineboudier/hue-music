@@ -307,6 +307,36 @@ python -m huemusic studio dramma
   strobes) beat by beat.
 - **Click a light** to see which cues are driving it right now.
 
+### Follow a melody
+
+For a moment where the lights should follow a specific melody or riff,
+instead of the beat:
+
+1. In the studio, zoom to **2 bars** around the passage. The **sounds**
+   track under the sections shows a tick wherever a sound starts: taller
+   means louder, and the color is the pitch. The faint lines are beats and
+   sixteenth notes, so you can see where each note falls. Hover a tick to
+   see its note and time.
+2. Pick a **Snap** value (1/16 for fast melodies, 1/8 otherwise). Click
+   **● Record taps**, which starts playback. A slower speed (0.5×) makes it
+   easier.
+3. Tap along with the notes:
+   - `L` / `R`: left / right half
+   - `F` / `B`: front / back half
+   - `A`: all lights
+   - `1`–`9`: a light along the path
+   - `N`: next light along the path, `P`: previous
+4. Click **■ Stop recording**. The taps are snapped to the grid and turned
+   into a `sequence` cue. **Add to this preset** appends it to the file,
+   and the page reloads with it.
+5. To repeat a one-bar pattern over a longer passage, lengthen its `dur`
+   or replace it with `until: <section>`.
+
+The detected sounds are a guide, not the truth. Timing is good to about
+±50 ms. Pitch is the dominant note at that moment, which in a full mix is
+sometimes the chord rather than the melody. And the track can't tell which
+sound is *the* melody. Your ear decides.
+
 Then confirm on the real lights:
 
 ```powershell

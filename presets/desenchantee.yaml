@@ -363,3 +363,19 @@ cues:
     effect: fade
     from: night
     to: black
+
+  - at: bar 88 beat 2                # recorded in the studio
+    dur: 70 beats          # lengthen it to repeat the pattern
+    effect: sequence
+    step: 0.25
+    pattern: "A . . .  . . . .  . A . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . A  . . . .  . . . A  . . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . A  . . . .  . . . .  A . . .  . . . .  A . . .  . . . A  . . . .  . . . A  . . . .  . . . .  A . . .  . . . .  A . . .  . . . .  A . . .  . . . A"
+    color: white
+    blend: add
+
+  - at: bar 105 beat 4                # recorded in the studio
+    dur: 1.25 beats          # lengthen it to repeat the pattern
+    effect: sequence
+    step: 0.25
+    pattern: "A . A .  A"
+    color: white
+    blend: add
