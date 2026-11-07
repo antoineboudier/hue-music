@@ -1,0 +1,365 @@
+# Désenchantée (Oli's EuroRave Mix) - Oliver Heldens & Kate Ryan
+#
+# Made from the official music video audio. If Spotify's version has a
+# different length, `play` will warn: the sections would need shifting.
+#
+# Signature moves:
+#   - drops: kick on half the lights, offbeat bass on the other half
+#   - bar 8 of each drop (a one-bar break in the track): fast spin around the room
+#   - builds: a light circling the room, doubling speed every few bars
+
+track:
+  title: Désenchantée
+  artist: Oliver Heldens & Kate Ryan
+  spotify_uri:              # filled automatically on first play
+  audio: "mp3/Oliver Heldens & Kate Ryan - Désenchantée (Oli’s EuroRave Mix) [Official Music Video].mp3"
+  duration: 217.734
+  bpm: 140.025
+  first_beat: 0.0348
+
+palette:
+  night:   "#14002e"
+  purple:  "#7a00ff"
+  magenta: "#ff00c8"
+  rose:    "#ff3c78"
+  ice:     "#b0e0ff"
+  cyan:    "#00d8ff"
+
+sections:
+  intro:     bar 1
+  verse1:    bar 10
+  verse2:    bar 26
+  build1:    bar 38
+  drop1:     bar 44
+  break1:    bar 58
+  drop2:     bar 62
+  fall:      bar 82
+  breakdown: bar 86
+  build2:    bar 96
+  gap:       bar 106
+  drop3:     bar 108
+  outro:     bar 122
+  end:       bar 126
+
+cues:
+  # ------------------------------------------------------------- intro
+  - in: intro
+    effect: fade
+    from: black
+    to: night
+    ease: inout
+
+  - in: intro                     # one slow glow drifting around the room
+    order: circle
+    effect: sweep
+    color: purple
+    every: 4 bars
+    width: 0.25
+    intensity: 0.5
+    blend: add
+
+  # -------------------------------------------- verse 1 (soft, no bass)
+  - in: verse1
+    effect: breathe
+    color: purple
+    period: 2 bars
+    min: 0.25
+
+  - in: verse1
+    effect: sparkle
+    color: ice
+    every: 1
+    density: 0.2
+    intensity: 0.5
+    blend: add
+
+  # ------------------------------------------ verse 2 (light beat comes in)
+  - in: verse2
+    effect: pulse
+    color: purple
+    every: 1
+    decay: 0.6
+    min: 0.25
+
+  - in: verse2
+    order: circle
+    effect: sweep
+    color: ice
+    every: 2 bars
+    width: 0.2
+    intensity: 0.6
+    blend: add
+
+  # ----------------------------------------------------------- build 1
+  - in: build1
+    effect: fade
+    from: night
+    to: magenta
+    ease: in
+
+  - in: build1                    # 1 beat -> 1/2 -> 1/4 -> 1/8, around the room
+    order: circle
+    effect: chase
+    colors: [ice, white]
+    every: 1
+    every_end: 0.125
+    curve: doubling
+    tail: 2
+    blend: add
+
+  - at: drop1 - 2 beats
+    until: drop1
+    effect: blackout
+
+  # ------------------------------------------------------------ drop 1
+  - in: drop1                     # kick on half the lights...
+    lights: odd
+    effect: pulse
+    color: magenta
+    every: 1
+    decay: 0.5
+    min: 0.15
+
+  - in: drop1                     # ...offbeat bass on the other half
+    lights: even
+    effect: pulse
+    color: ice
+    every: 1
+    offset: 0.5
+    decay: 0.5
+    min: 0.1
+
+  - at: drop1 + 8 bars            # second half: sparkles on top
+    until: drop1.end
+    effect: sparkle
+    color: white
+    every: 0.5
+    density: 0.2
+    blend: add
+
+  - at: drop1 + 7 bars            # the break bar: fast spin
+    dur: 1 bar
+    order: circle
+    effect: chase
+    color: white
+    every: 0.125
+    tail: 3
+    background: night
+
+  - at: drop1
+    dur: 2 beats
+    effect: solid
+    color: white
+    fade_out: 2 beats
+
+  # ------------------------------------------------------------ break 1
+  - in: break1
+    order: circle
+    effect: sweep
+    color: rose
+    every: 1 bar
+    width: 0.3
+    background: night
+
+  - at: drop2 - 2 bars            # quick acceleration into drop 2
+    until: drop2 - 1 beat
+    order: circle
+    effect: chase
+    color: white
+    every: 0.5
+    every_end: 0.125
+    curve: doubling
+    tail: 2
+    blend: add
+
+  - at: drop2 - 1 beat
+    until: drop2
+    effect: blackout
+
+  # ------------------------------------------------------------ drop 2
+  - at: drop2                     # color wheel spinning around the room
+    until: drop2 + 7 bars
+    order: circle
+    effect: rainbow
+    speed: 2 bars
+    spread: 1
+
+  - at: drop2
+    until: drop2 + 7 bars
+    effect: pulse
+    color: white
+    every: 1
+    decay: 0.3
+    intensity: 0.7
+    blend: add
+
+  - at: drop2 + 7 bars            # break bar spin
+    dur: 1 bar
+    order: circle
+    effect: chase
+    color: white
+    every: 0.125
+    tail: 3
+    background: night
+
+  - at: drop2 + 8 bars            # second half: halves swap magenta / cyan
+    until: drop2.end
+    effect: alternate
+    colors: [magenta, cyan]
+    every: 1
+
+  - at: drop2 + 8 bars            # + offbeat white flicker
+    until: drop2.end
+    effect: pulse
+    color: white
+    every: 1
+    offset: 0.5
+    decay: 0.3
+    intensity: 0.5
+    blend: add
+
+  - at: drop2.end - 4 bars        # last 4 bars: sparkle frenzy
+    until: drop2.end
+    effect: sparkle
+    color: white
+    every: 0.25
+    density: 0.3
+    blend: add
+
+  - at: drop2
+    dur: 2 beats
+    effect: solid
+    color: white
+    fade_out: 2 beats
+
+  # ------------------------------------------------- fall + breakdown
+  - in: fall                      # energy draining out
+    effect: fade
+    from: magenta
+    to: night
+    ease: out
+
+  - in: breakdown
+    effect: breathe
+    color: purple
+    period: 2 bars
+    min: 0.2
+    fade_in: 1 bar
+
+  - in: breakdown
+    order: circle
+    effect: sweep
+    color: ice
+    every: 4 bars
+    width: 0.3
+    intensity: 0.6
+    blend: add
+
+  # ----------------------------------------------------------- build 2
+  - in: build2                    # 10 bars: slow rise...
+    effect: fade
+    from: night
+    to: purple
+    ease: in
+
+  - in: build2                    # ...with the circle speeding up (1 -> 1/8 beat)
+    order: circle
+    effect: chase
+    colors: [ice, white]
+    every: 1
+    every_end: 0.125
+    curve: doubling
+    tail: 3
+    blend: add
+
+  - at: gap                       # near-silence: almost dark
+    dur: 1 bar
+    effect: solid
+    color: night
+
+  - at: gap + 1 bar               # riser: strobe accelerating to the drop
+    until: drop3 - 1 beat
+    effect: strobe
+    color: white
+    rate: 1
+    rate_end: 8
+    duty: 0.3
+
+  - at: drop3 - 1 beat
+    until: drop3
+    effect: blackout
+
+  # ------------------------------------------------------- drop 3 (final)
+  - at: drop3                     # halves swap + white chase running around
+    until: drop3 + 7 bars
+    effect: alternate
+    colors: [magenta, purple]
+    every: 1
+
+  - at: drop3
+    until: drop3 + 7 bars
+    order: circle
+    effect: chase
+    color: white
+    every: 0.5
+    tail: 2
+    blend: add
+
+  - at: drop3 + 7 bars            # break bar spin
+    dur: 1 bar
+    order: circle
+    effect: chase
+    color: white
+    every: 0.125
+    tail: 3
+    background: night
+
+  - at: drop3 + 8 bars            # last stretch: fast rainbow wheel + everything
+    until: drop3.end
+    order: circle
+    effect: rainbow
+    speed: 1 bar
+    spread: 1
+
+  - at: drop3 + 8 bars
+    until: drop3.end
+    effect: pulse
+    color: white
+    every: 1
+    decay: 0.3
+    intensity: 0.7
+    blend: add
+
+  - at: drop3 + 8 bars
+    until: drop3.end
+    effect: sparkle
+    color: white
+    every: 0.25
+    density: 0.2
+    blend: add
+
+  - at: drop3
+    dur: 2 beats
+    effect: solid
+    color: white
+    fade_out: 2 beats
+
+  # ------------------------------------------------------------- outro
+  - in: outro
+    effect: fade
+    from: magenta
+    to: night
+    ease: out
+
+  - in: outro
+    effect: pulse
+    color: purple
+    every: 1
+    decay: 0.6
+    blend: add
+    fade_out: 4 bars
+
+  - in: end
+    effect: fade
+    from: night
+    to: black

@@ -1,0 +1,340 @@
+# Dramma - R3HAB & ARTBAT
+#
+# Theatrical palette: crimson / amber / gold / warm white on near-black.
+# Generated from analysis/R3HAB & ARTBAT - Dramma Visualiser.json
+
+track:
+  title: Dramma
+  artist: R3HAB & ARTBAT
+  spotify_uri:              # filled automatically on first play
+  audio: "mp3/R3HAB & ARTBAT - Dramma Visualiser.mp3"
+  duration: 209.514
+  bpm: 128
+  first_beat: 0.1741
+
+palette:
+  ember:   "#3a0400"
+  crimson: "#d1001f"
+  amber:   "#ff7a00"
+  gold:    "#ffc040"
+  bone:    "#fff1dc"
+
+sections:
+  pickup:    bar 1
+  intro:     bar 2
+  verse:     bar 10
+  build1:    bar 22
+  drop1:     bar 26
+  lull1:     bar 38
+  drop1b:    bar 42
+  fade1:     bar 48
+  ambient:   bar 50
+  groove:    bar 58
+  gap:       bar 66
+  breakdown: bar 68
+  build2:    bar 80
+  riser:     bar 84
+  drop2:     bar 86
+  lull2:     bar 100
+  drop2b:    bar 102
+  end:       bar 110
+
+cues:
+  # ------------------------------------------------------------- intro
+  - in: pickup
+    effect: fade
+    from: black
+    to: ember
+
+  - in: intro
+    effect: breathe
+    color: crimson
+    period: 2 bars
+    min: 0.2
+
+  - in: intro                     # amber glow circling the room
+    order: circle
+    effect: sweep
+    color: amber
+    every: 2 bars
+    width: 0.25
+    intensity: 0.5
+    blend: add
+
+  - at: intro                     # bass hit on bar 2
+    dur: 2 beats
+    effect: solid
+    color: bone
+    fade_out: 2 beats
+
+  # ------------------------------------------------------- vocal break
+  - in: verse
+    effect: breathe
+    color: ember
+    period: 4 bars
+    min: 0.4
+
+  - in: verse
+    effect: sparkle
+    color: amber
+    every: 1
+    density: 0.15
+    intensity: 0.5
+    blend: add
+
+  - at: verse                     # bass hit on bar 10
+    dur: 2 beats
+    effect: solid
+    color: amber
+    fade_out: 2 beats
+
+  # ----------------------------------------------------------- build 1
+  - in: build1
+    effect: fade
+    from: ember
+    to: crimson
+    ease: in
+
+  - in: build1                    # 1/2 -> 1/4 -> 1/8 beat around the room
+    order: circle
+    effect: chase
+    color: bone
+    every: 0.5
+    every_end: 0.125
+    curve: doubling
+    tail: 2
+    blend: add
+
+  # ------------------------------------------------------------ drop 1
+  - in: drop1                     # crimson / amber pump
+    effect: pulse
+    colors: [crimson, amber]
+    every: 1
+    decay: 0.7
+    min: 0.15
+
+  - at: drop1                     # white runner around the room
+    until: drop1 + 8 bars
+    order: circle
+    effect: chase
+    color: bone
+    every: 0.5
+    tail: 2
+    intensity: 0.8
+    blend: add
+
+  - at: drop1 + 8 bars            # last 4 bars: a gold wave every bar instead
+    until: drop1.end
+    order: circle
+    effect: sweep
+    color: gold
+    every: 1 bar
+    width: 0.3
+    blend: add
+
+  - at: drop1
+    dur: 2 beats
+    effect: solid
+    color: bone
+    fade_out: 2 beats
+
+  # ------------------------------------------- lull (lower melodic part)
+  - in: lull1
+    effect: pulse
+    color: amber
+    every: 2
+    decay: 0.8
+    min: 0.2
+
+  - at: drop1b - 2 beats          # the two silent beats
+    until: drop1b
+    effect: blackout
+
+  # ------------------------------------------------- drop 1, second part
+  - in: drop1b                    # room halves swap crimson / gold
+    effect: alternate
+    colors: [crimson, gold]
+    every: 1
+
+  - in: drop1b
+    effect: sparkle
+    color: bone
+    every: 0.25
+    density: 0.2
+    blend: add
+
+  - at: drop1b
+    dur: 2 beats
+    effect: solid
+    color: bone
+    fade_out: 2 beats
+
+  - in: fade1
+    effect: fade
+    from: crimson
+    to: black
+    ease: out
+
+  # ---------------------------------------------------------- ambient
+  - in: ambient
+    effect: breathe
+    color: ember
+    period: 4 bars
+    min: 0.3
+
+  - in: ambient
+    order: circle
+    effect: sweep
+    color: amber
+    every: 4 bars
+    width: 0.2
+    intensity: 0.35
+    blend: add
+
+  # ----------------------------------------------------------- groove
+  - in: groove                    # kick on half the lights...
+    lights: odd
+    effect: pulse
+    color: amber
+    every: 1
+    decay: 0.5
+    min: 0.1
+
+  - in: groove                    # ...offbeat on the other half
+    lights: even
+    effect: pulse
+    color: crimson
+    every: 1
+    offset: 0.5
+    decay: 0.5
+    min: 0.1
+
+  - in: gap
+    effect: fade
+    from: amber
+    to: black
+    ease: out
+
+  # -------------------------------------------------------- breakdown
+  - in: breakdown
+    effect: breathe
+    color: crimson
+    period: 2 bars
+    min: 0.1
+    fade_in: 1 bar
+
+  - in: breakdown
+    effect: sparkle
+    color: bone
+    every: 0.5
+    density: 0.1
+    intensity: 0.4
+    blend: add
+
+  # ----------------------------------------------------------- build 2
+  - in: build2
+    effect: fade
+    from: ember
+    to: crimson
+    ease: in
+
+  - in: build2                    # 1 -> 1/2 -> 1/4 -> 1/8 beat around the room
+    order: circle
+    effect: chase
+    colors: [gold, bone]
+    every: 1
+    every_end: 0.125
+    curve: doubling
+    tail: 3
+    blend: add
+
+  - at: riser                     # riser: accelerating strobe
+    until: drop2 - 1 beat
+    effect: strobe
+    color: bone
+    rate: 1
+    rate_end: 8
+    duty: 0.3
+    background: ember
+
+  - at: drop2 - 1 beat
+    until: drop2
+    effect: blackout
+
+  # ------------------------------------------------------------ drop 2
+  - in: drop2                     # halves swap crimson / white...
+    effect: alternate
+    colors: [crimson, bone]
+    every: 1
+
+  - in: drop2                     # ...with a fast gold runner on top
+    order: circle
+    effect: chase
+    color: gold
+    every: 0.25
+    tail: 3
+    blend: add
+
+  - at: drop2 + 8 bars
+    until: drop2.end
+    effect: sparkle
+    color: bone
+    every: 0.25
+    density: 0.25
+    blend: add
+
+  - at: drop2
+    dur: 2 beats
+    effect: solid
+    color: bone
+    fade_out: 2 beats
+
+  # ---------------------------------------------- short break: the spin
+  - at: lull2
+    until: drop2b - 2 beats
+    order: circle
+    effect: chase
+    color: bone
+    every: 0.125
+    tail: 3
+    background: ember
+
+  - at: drop2b - 2 beats
+    until: drop2b
+    effect: blackout
+
+  # ------------------------------------------------------- final drop
+  - in: drop2b
+    effect: pulse
+    colors: [bone, crimson, gold]
+    every: 1
+    decay: 0.6
+    min: 0.2
+
+  - in: drop2b
+    order: circle
+    effect: sweep
+    color: gold
+    every: 1 bar
+    width: 0.3
+    blend: add
+
+  - at: drop2b.end - 1 bar        # last bar: everything strobes
+    until: drop2b.end
+    effect: strobe
+    color: bone
+    rate: 4
+    blend: add
+
+  - at: drop2b
+    dur: 2 beats
+    effect: solid
+    color: bone
+    fade_out: 2 beats
+
+  # ------------------------------------------------------------- end
+  - in: end
+    effect: fade
+    from: crimson
+    to: black
+    ease: out

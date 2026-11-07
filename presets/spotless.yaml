@@ -9,6 +9,7 @@ track:
   title: Spotless
   artist: Martin Garrix & Jay Hardway
   spotify_uri:              # filled automatically on first play
+  audio: "mp3/Martin Garrix & Jay Hardway - Spotless.mp3"   # local file for --mp3 (relative to project root)
   duration: 195.08
   bpm: 128
   first_beat: 0.128         # time of bar 1, beat 1 (seconds)
@@ -87,19 +88,20 @@ cues:
     blend: add
 
   # ----------------------------------------------------------- build 1
-  - in: build1
+  - in: build1                    # dim background, slowly rising
     effect: fade
-    from: deep
-    to: cyan
+    from: black
+    to: deep
     ease: in
 
-  - in: build1                    # accelerating strobe, getting brighter
-    effect: strobe
-    color: white
-    rate: 0.5
-    rate_end: 4
-    duty: 0.3
-    fade_in: 7 bars
+  - in: build1                    # light running around the room, speeding up:
+    order: circle                 # 1 beat -> 1/2 -> 1/4 -> 1/8 (every 2 bars)
+    effect: chase
+    colors: [ice, white]
+    every: 1
+    every_end: 0.125
+    curve: doubling
+    tail: 2
     blend: add
 
   - at: drop1 - 2 beats           # breath before the drop
@@ -176,17 +178,29 @@ cues:
   # ----------------------------------------------------------- build 2
   - in: build2
     effect: fade
-    from: deep
-    to: magenta
+    from: black
+    to: violet
     ease: in
 
-  - in: build2
+  - at: build2                    # same circle, other way round, longer tail
+    until: build2.end - 2 bars
+    order: circle
+    effect: chase
+    colors: [magenta, white]
+    direction: backward
+    every: 1
+    every_end: 0.25
+    curve: doubling
+    tail: 3
+    blend: add
+
+  - at: build2.end - 2 bars       # last 2 bars: full-room strobe takes over
+    until: build2.end
     effect: strobe
     color: white
-    rate: 0.5
-    rate_end: 6
+    rate: 2
+    rate_end: 8
     duty: 0.3
-    fade_in: 6 bars
     blend: add
 
   - at: drop2 - 2 beats
@@ -194,11 +208,12 @@ cues:
     effect: blackout
 
   # ------------------------------------------------------------ drop 2
-  - at: drop2
+  - at: drop2                     # full color wheel spinning around the room
     until: drop2 + 8 bars
+    order: circle
     effect: rainbow
     speed: 2 bars
-    spread: 0.6
+    spread: 1
 
   - at: drop2                     # beat pulse on top of the rainbow
     until: drop2 + 8 bars
