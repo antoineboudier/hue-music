@@ -1,0 +1,442 @@
+# Désenchantée 3000 - Blasterjaxx & Kate Ryan
+#
+# Neon "3000" palette: ultraviolet / electric cyan / hot pink on a deep void.
+# Highlight: 1:53 -> 2:20 (bars 69-84), the lights play the synth melody.
+# Each note of the tune has its own place and color, low notes on the left,
+# high notes on the right: C# D# F# G# A# -> lights 1-2, 3-4, 5-6, 7-8, 9-10.
+# Those patterns were generated from a pitch analysis of the synth (voice and
+# drums filtered out); fix single notes by ear in the studio if needed.
+
+track:
+  title: Désenchantée 3000
+  artist: Blasterjaxx & Kate Ryan
+  spotify_uri:              # filled automatically on first play
+  audio: "mp3/Blasterjaxx & Kate Ryan - Désenchantée 3000.mp3"
+  duration: 185.017
+  bpm: 145
+  first_beat: 1.3168
+
+palette:
+  void:    "#07021c"
+  uv:      "#5b00ff"
+  violet:  "#a43cff"
+  cyan:    "#00e5ff"
+  pink:    "#ff1f8f"
+
+sections:
+  intro:     bar 1
+  build1:    bar 13
+  drop1:     bar 17
+  fall1:     bar 33
+  verse1:    bar 35
+  verse2:    bar 51
+  breakdown: bar 63
+  synth:     bar 69
+  lift:      bar 85
+  build2:    bar 88
+  gap:       bar 92
+  drop2:     bar 93
+  outro:     bar 108
+
+cues:
+  # ------------------------------------------------------------- intro
+  - at: intro                       # first 15 s are smooth: slow glow, no beat
+    until: bar 9
+    effect: breathe
+    color: uv
+    period: 2 bars
+    min: 0.25
+    fade_in: 1 bar
+    fade_out: 1 bar
+
+  - at: bar 9                       # the beat comes in at 0:14.6
+    until: intro.end
+    effect: pulse
+    color: uv
+    every: 1
+    decay: 0.5
+    min: 0.15
+    fade_in: 1 bar
+
+  - in: intro                       # cyan glow circling the room every 2 bars
+    order: circle
+    effect: sweep
+    color: cyan
+    every: 2 bars
+    width: 0.25
+    intensity: 0.5
+    blend: add
+
+  # ----------------------------------------------------------- build 1
+  - in: build1
+    effect: fade
+    from: void
+    to: pink
+    ease: in
+
+  - in: build1                      # circling light, 1/2 -> 1/4 -> 1/8 beat
+    until: drop1 - 1 bar
+    order: circle
+    effect: chase
+    color: white
+    every: 0.5
+    every_end: 0.125
+    curve: doubling
+    tail: 2
+    blend: add
+
+  - at: drop1 - 1 bar               # near-silent bar: strobe riser
+    until: drop1 - 1 beat
+    effect: strobe
+    color: white
+    rate: 1
+    rate_end: 8
+    duty: 0.3
+    background: void
+
+  - at: drop1 - 1 beat
+    until: drop1
+    effect: blackout
+
+  # ------------------------------------------------------------ drop 1
+  - at: drop1                       # kick on half the lights...
+    until: drop1 + 8 bars
+    lights: odd
+    effect: pulse
+    color: pink
+    every: 1
+    decay: 0.5
+    min: 0.15
+
+  - at: drop1                       # ...offbeat on the other half
+    until: drop1 + 8 bars
+    lights: even
+    effect: pulse
+    color: cyan
+    every: 1
+    offset: 0.5
+    decay: 0.5
+    min: 0.1
+
+  - at: drop1 + 8 bars              # second half: halves swap uv / cyan, with sparkles
+    until: drop1.end
+    effect: alternate
+    colors: [uv, cyan]
+    every: 1
+
+  - at: drop1 + 8 bars
+    until: drop1.end
+    effect: sparkle
+    color: white
+    every: 0.25
+    density: 0.2
+    blend: add
+
+  - at: drop1
+    dur: 2 beats
+    effect: solid
+    color: white
+    fade_out: 2 beats
+
+  - in: fall1
+    effect: fade
+    from: pink
+    to: void
+    ease: out
+
+  # ------------------------------------------------------------ verses
+  - in: verse1                      # calm: slow ultraviolet glow, no beat-by-beat flashing
+    effect: breathe
+    color: uv
+    period: 2 bars
+    min: 0.3
+    fade_in: 1 bar
+
+  - in: verse1                      # just a soft swell on the first beat of each bar
+    effect: pulse
+    color: violet
+    every: 4
+    decay: 0.8
+    intensity: 0.35
+    blend: add
+
+  - in: verse1
+    effect: sparkle
+    color: cyan
+    every: 1
+    density: 0.15
+    intensity: 0.5
+    blend: add
+
+  - in: verse2
+    effect: pulse
+    color: uv
+    every: 1
+    decay: 0.6
+    min: 0.2
+    intensity: 0.8
+
+  - in: verse2                      # pink wave around the room every 2 bars
+    order: circle
+    effect: sweep
+    color: pink
+    every: 2 bars
+    width: 0.25
+    intensity: 0.7
+    blend: add
+
+  # ---------------------------------------------------------- breakdown
+  - in: breakdown                   # energy drains out before the synth
+    effect: fade
+    from: uv
+    to: void
+    ease: out
+
+  # ------------------------------------- the synth melody (1:53 -> 2:20)
+  - in: synth                       # near-dark room, so the notes stand out
+    effect: breathe
+    color: uv
+    period: 4 bars
+    min: 0.1
+    intensity: 0.25
+
+  # Synth motif (from your taps, aligned on the synth's attacks): 5 notes every
+  # 2 bars, R L B (bar A) then F R (bar B), each half of the room in its own color.
+  - at: bar 68 + 0.125 beats      # synth motif: right half (R)
+    until: lift
+    effect: sequence
+    step: 0.25
+    color: pink
+    decay: 1
+    repeat: no
+    blend: add
+    pattern: >-                     # one line per bar, bars 68 -> 84
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . R - -  - . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . R - -
+      - R - -  - . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . R - -
+      - R - -  - . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . R - -
+      - R - -  - . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . R - -
+      - R - -  - . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . R - -
+      - R - -  - . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . R - -
+      - R - -  - . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . R - -
+      - R - -  - . . .  . . . .  . . . .
+
+  - at: bar 68 + 0.125 beats      # synth motif: left half (L)
+    until: lift
+    effect: sequence
+    step: 0.25
+    color: cyan
+    decay: 1
+    repeat: no
+    blend: add
+    pattern: >-                     # one line per bar, bars 68 -> 84
+      . . . .  . . . .  . . . .  . . . L
+      - - - .  . . . .  . . . .  . . . .
+      . . . .  . . . L  - - - .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . L  - - - .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . L  - - - .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . L  - - - .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . L  - - - .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . L  - - - .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . L  - - - .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . L  - - - .  . . . .
+
+  - at: bar 68 + 0.125 beats      # synth motif: back half (B)
+    until: lift
+    effect: sequence
+    step: 0.25
+    color: uv
+    decay: 1
+    repeat: no
+    blend: add
+    pattern: >-                     # one line per bar, bars 68 -> 84
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . B  - - - .  . . . .
+      . . . .  . . . .  . . . .  . . . B
+      - - - .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . B
+      - - - .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . B
+      - - - .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . B
+      - - - .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . B
+      - - - .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . B
+      - - - .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . B
+      - - - .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . B  - - - .
+
+  - at: bar 68 + 0.125 beats      # synth motif: front half (F)
+    until: lift
+    effect: sequence
+    step: 0.25
+    color: white
+    decay: 1
+    repeat: no
+    blend: add
+    pattern: >-                     # one line per bar, bars 68 -> 84
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . F
+      - - - .  . . . .  . . . .  . . . .
+      . . . .  . F - -  - . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . F - -  - . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . F - -  - . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . F - -  - . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . F - -  - . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . F - -  - . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . F - -  - . . .  . . . .
+      . . . .  . . . .  . . . .  . . . F
+
+  - at: bar 68 + 0.125 beats      # extra synth notes you didn't tap (bars 78-84): soft, one light walking around
+    until: lift
+    order: circle
+    effect: sequence
+    step: 0.25
+    color: violet
+    decay: 1
+    repeat: no
+    intensity: 0.6
+    blend: add
+    pattern: >-                     # one line per bar, bars 68 -> 84
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . > - .  . . . .  . . . .
+      . . . .  . . . >  - . . .  . . . .
+      . . . .  . > - .  . > - .  . > - .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . . . .  . . . .  . . . .
+      . . . .  . > - .  . . . .  . . . .
+  # ------------------------------------------------- lift + build 2
+  - in: lift                        # bass is back
+    effect: pulse
+    color: cyan
+    every: 1
+    decay: 0.5
+    min: 0.1
+
+  - in: build2
+    effect: fade
+    from: void
+    to: pink
+    ease: in
+
+  - in: build2                      # 1 -> 1/2 -> 1/4 -> 1/8 beat, one stage per bar
+    order: circle
+    effect: chase
+    colors: [cyan, white]
+    every: 1
+    every_end: 0.125
+    curve: doubling
+    tail: 3
+    blend: add
+
+  - in: gap                         # near-silent bar: strobe riser
+    until: drop2 - 1 beat
+    effect: strobe
+    color: white
+    rate: 1
+    rate_end: 8
+    duty: 0.3
+    background: void
+
+  - at: drop2 - 1 beat
+    until: drop2
+    effect: blackout
+
+  # ------------------------------------------------------------ drop 2
+  - at: drop2                       # color wheel spinning around the room
+    until: drop2 + 7 bars
+    order: circle
+    effect: rainbow
+    speed: 2 bars
+    spread: 1
+
+  - at: drop2
+    until: drop2 + 7 bars
+    effect: pulse
+    color: white
+    every: 1
+    decay: 0.3
+    intensity: 0.7
+    blend: add
+
+  - at: drop2 + 7 bars              # the break bar: fast white spin
+    dur: 1 bar
+    order: circle
+    effect: chase
+    color: white
+    every: 0.125
+    tail: 3
+    background: void
+
+  - at: drop2 + 8 bars              # finale: pink / cyan halves + white runner
+    until: drop2.end
+    effect: alternate
+    colors: [pink, cyan]
+    every: 1
+
+  - at: drop2 + 8 bars
+    until: drop2.end
+    order: circle
+    effect: chase
+    color: white
+    every: 0.25
+    tail: 2
+    blend: add
+
+  - at: drop2.end - 1 bar
+    until: drop2.end
+    effect: strobe
+    rate: 4
+    blend: add
+
+  - at: drop2                       # hits
+    dur: 2 beats
+    effect: solid
+    color: white
+    fade_out: 2 beats
+
+  - at: drop2 + 8 bars
+    dur: 1 beat
+    effect: solid
+    color: white
+    fade_out: 1 beat
+
+  # ------------------------------------------------------------- outro
+  - in: outro
+    effect: fade
+    from: pink
+    to: black
+    ease: out

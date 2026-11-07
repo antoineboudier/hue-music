@@ -21,6 +21,7 @@ Presets included: `spotless`, `desenchantee`, `dramma`.
   design advice.
 - [Preset reference](docs/preset-reference.md): every key, value format
   and effect.
+- [Roadmap](docs/roadmap.md): proposed enhancements, prioritized.
 
 ## Setup
 
