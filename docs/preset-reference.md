@@ -41,6 +41,37 @@ cues:                   # layered in list order: later cues are drawn on top
     label: kick         # optional name shown in the status line
 ```
 
+## Several versions of a song
+
+Every `.yaml` file in `presets/` is a preset, named after its file
+(`play spotless-v2`). To make another version of a song without copying
+its timing, base it on an existing preset:
+
+```yaml
+based_on: spotless          # another preset in the same folder
+description: "more strobes" # shown by `list` and in the studio
+
+cues:                       # this version's own cues
+  - in: drop1
+    ...
+```
+
+- **Inherited:** `track`, `palette`, `groups` and `sections`, merged key
+  by key. Anything you set in the variant overrides the base (for
+  example, one palette color or one section start).
+- **Cues:** the variant's `cues` *replace* the base's. Add
+  `inherit_cues: true` to keep the base's cues and draw yours on top.
+- **Not inherited:** `description`.
+- A variant can itself be the base of another one.
+- Fixing a section in the base fixes every variant.
+- The studio reloads when either the variant or its base file changes.
+
+Create one with
+`python -m huemusic new spotless-v2 --from spotless -d "more strobes"`.
+That writes the `based_on` header plus a copy of the base's cues, ready to
+edit. Use `--copy` instead for a fully independent duplicate.
+`python -m huemusic list` shows all presets grouped by song.
+
 ## Values
 
 **Times** (`at`, `until`, section starts, `--start`):

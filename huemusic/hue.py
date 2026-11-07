@@ -117,6 +117,44 @@ class Bridge:
             raise HueError(f"bridge didn't return a hue-application-id (HTTP {r.status_code})")
         return app_id
 
+    def light_for_service(self, entertainment_rid: str) -> str:
+        """Light resource id behind an entertainment service (entertainment -> device -> light)."""
+        ent = self.get(f"entertainment/{entertainment_rid}")[0]
+        device = self.get(f"device/{ent['owner']['rid']}")[0]
+        for s in device.get("services", []):
+            if s.get("rtype") == "light":
+                return s["rid"]
+        raise HueError("no light found for this channel")
+
+    def identify(self, light_rid: str) -> None:
+        """Make the light blink a few times (Hue's built-in identify)."""
+        self.put(f"light/{light_rid}", {"identify": {"action": "identify"}})
+
+    def set_positions(self, area: dict, positions: dict[str, tuple[float, float]]) -> tuple[int, list[str]]:
+        """Write new (x, y) floor positions for entertainment services of an area.
+
+        `positions` maps entertainment service id -> (x, y). Heights (z) are
+        kept. Services with several positions (gradient strips) are left
+        unchanged and reported as skipped.
+        """
+        updated, skipped, out = 0, [], []
+        for loc in area.get("locations", {}).get("service_locations", []):
+            rid = loc["service"]["rid"]
+            pts = loc.get("positions") or [loc.get("position")]
+            entry = {"service": loc["service"], "positions": pts}
+            if "equalization_factor" in loc:
+                entry["equalization_factor"] = loc["equalization_factor"]
+            if rid in positions:
+                if len(pts) == 1:
+                    x, y = positions[rid]
+                    entry["positions"] = [{"x": round(x, 5), "y": round(y, 5), "z": pts[0].get("z", 0.0)}]
+                    updated += 1
+                else:
+                    skipped.append(rid)
+            out.append(entry)
+        self.put(f"entertainment_configuration/{area['id']}", {"locations": {"service_locations": out}})
+        return updated, skipped
+
     def set_streaming(self, area_id: str, active: bool) -> None:
         self.put(f"entertainment_configuration/{area_id}", {"action": "start" if active else "stop"})
 

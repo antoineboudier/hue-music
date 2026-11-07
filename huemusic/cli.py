@@ -187,7 +187,12 @@ def cmd_check(args) -> None:
 
     p = load(preset_path(args.preset))
     g = p.grid
-    print(f"{p.title} - {p.artist}   {g.bpm} BPM, bar 1 at {g.first_beat}s, {len(p.cues)} cues\n")
+    print(f"{p.title} - {p.artist}   {g.bpm} BPM, bar 1 at {g.first_beat}s, {len(p.cues)} cues")
+    if p.description:
+        print(f"  {p.description}")
+    if p.based_on:
+        print(f"  based on: {' -> '.join(f.stem for f in p.files[1:])}")
+    print()
     print("Sections:")
     for name, (a, b) in p.sections.items():
         print(f"  {name:<12} {fmt_time(a)} (bar {g.position(a):>6})  ->  {fmt_time(b) if b != float('inf') else 'end'}")
@@ -200,6 +205,63 @@ def cmd_check(args) -> None:
     for w in show.warnings:
         print("warning:", w)
     print("\nOK")
+
+
+# ------------------------------------------------------------- list / new
+def cmd_list(args) -> None:
+    from .preset import PresetError, load
+
+    songs: dict[str, list] = {}
+    for path in sorted(config.PRESETS_DIR.glob("*.yaml"), key=lambda p: p.stem):
+        try:
+            p = load(path)
+            key = f"{p.title} - {p.artist}"
+            extra = (f"  (based on {p.based_on})" if p.based_on else "") + (f"  {p.description}" if p.description else "")
+        except PresetError as e:
+            key, extra = "(invalid presets)", f"  error: {e}"
+        songs.setdefault(key, []).append((path.stem, extra))
+    for song, items in songs.items():
+        print(song)
+        for name, extra in items:
+            print(f"  {name:<22}{extra}")
+
+
+def cmd_new(args) -> None:
+    import re
+
+    from .preset import load
+
+    src = preset_path(args.base)
+    dst = config.PRESETS_DIR / f"{args.name}.yaml"
+    if not re.fullmatch(r"[\w\-]+", args.name):
+        raise SystemExit("use letters, digits, - and _ only for the name (it's the file name)")
+    if dst.exists():
+        raise SystemExit(f"{dst.name} already exists")
+    base = load(src)
+    text = src.read_text(encoding="utf-8")
+    desc = args.description or ""
+    if args.copy:
+        # fully independent copy, with its own description line
+        body = re.sub(r"(?m)^description:.*\n", "", text)
+        dst.write_text(f'description: "{desc}"\n' + body, encoding="utf-8")
+    else:
+        # variant: inherits header/sections/palette/groups; starts with a copy of the cues to edit
+        m = re.search(r"(?m)^cues:.*$", text)
+        cues = text[m.start():] if m else "cues: []\n"
+        dst.write_text(
+            f"# {base.title} - {base.artist}: variant of {src.stem}.\n"
+            f"# Track header, sections, palette and groups come from {src.name}\n"
+            f"# (edit them there, or override single keys here). The cues below are this\n"
+            f"# version's own: change them freely. Add `inherit_cues: true` to keep\n"
+            f"# {src.stem}'s cues and only add new ones on top.\n\n"
+            f"based_on: {src.stem}\n"
+            f'description: "{desc}"\n\n'
+            + cues,
+            encoding="utf-8",
+        )
+    load(dst)  # validate
+    print(f"created {dst}")
+    print(f"  python -m huemusic studio {args.name}")
 
 
 # --------------------------------------------------------------------- play
@@ -249,8 +311,10 @@ def cmd_play(args) -> None:
             track = spotify.resolve_track(sp, preset.title, preset.artist, preset.spotify_uri)
             names = ", ".join(a["name"] for a in track["artists"])
             print(f"Track: {track['name']} - {names}  ({track['uri']})")
-            if not preset.spotify_uri and write_spotify_uri(path, track["uri"]):
-                print(f"  saved spotify_uri into {path.name}")
+            if not preset.spotify_uri:  # save it where the track header lives (the base, for a variant)
+                saved = next((f for f in preset.files if write_spotify_uri(f, track["uri"])), None)
+                if saved:
+                    print(f"  saved spotify_uri into {saved.name}")
             if preset.duration and abs(track["duration_ms"] / 1000 - preset.duration) > 2:
                 print(f"warning: Spotify's version is {fmt_time(track['duration_ms'] / 1000)} long but the preset "
                       f"was made for {fmt_time(preset.duration)}: it's probably a different edit, timings will be off.")
@@ -320,6 +384,15 @@ def _save_taps(preset, taps, latency_ms) -> None:
     print(f"{len(taps)} taps saved to {path}")
 
 
+# ------------------------------------------------------------------- studio
+def cmd_studio(args) -> None:
+    from .studio import serve
+
+    if args.preset:
+        preset_path(args.preset)  # fail early on a typo
+    serve(args.preset, port=args.port, open_browser=not args.no_browser)
+
+
 # --------------------------------------------------------------------- main
 def main(argv: list[str] | None = None) -> None:
     if os.name == "nt":
@@ -362,6 +435,22 @@ def main(argv: list[str] | None = None) -> None:
     s = sub.add_parser("check", help="validate a preset and print its timeline")
     s.add_argument("preset")
     s.set_defaults(fn=cmd_check)
+
+    s = sub.add_parser("list", help="list presets, grouped by song")
+    s.set_defaults(fn=cmd_list)
+
+    s = sub.add_parser("new", help="create another version of a preset (e.g. spotless-v2 from spotless)")
+    s.add_argument("name", help="new preset name, e.g. spotless-v2")
+    s.add_argument("--from", dest="base", required=True, help="existing preset to start from")
+    s.add_argument("--copy", action="store_true", help="independent full copy instead of a based_on variant")
+    s.add_argument("--description", "-d", help="one line describing this version")
+    s.set_defaults(fn=cmd_new)
+
+    s = sub.add_parser("studio",help="preview presets in the browser (lights + timeline + audio), no bridge needed")
+    s.add_argument("preset", nargs="?", help="preset to open first")
+    s.add_argument("--port", type=int, default=8765)
+    s.add_argument("--no-browser", action="store_true", help="don't open the browser automatically")
+    s.set_defaults(fn=cmd_studio)
 
     s = sub.add_parser("play", help="play a song with its light show")
     s.add_argument("preset", help="preset name (presets/<name>.yaml) or path")

@@ -27,5 +27,8 @@ huemusic = "huemusic.cli:main"
 [tool.setuptools]
 packages = ["huemusic"]
 
+[tool.setuptools.package-data]
+huemusic = ["static/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

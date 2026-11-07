@@ -46,6 +46,7 @@ test, and always get the same picture for the same `t`.
 | [`spotify.py`](../huemusic/spotify.py) | Spotify login, devices, track lookup, `SpotifyClock`, `FreeClock` |
 | [`audio.py`](../huemusic/audio.py) | `LocalAudioClock`: plays an MP3 and uses the sound card as the clock |
 | [`hue.py`](../huemusic/hue.py) | bridge pairing, entertainment areas, the DTLS streaming connection |
+| [`studio.py`](../huemusic/studio.py) + [`static/studio.html`](../huemusic/static/studio.html) | browser preview: renders the whole show up front, serves it and the MP3 to a local page |
 | [`config.py`](../huemusic/config.py) | `config.json` (credentials, light positions, latency per device) |
 | [`cli.py`](../huemusic/cli.py) | the `python -m huemusic ...` commands |
 
@@ -246,6 +247,44 @@ resets its schedule rather than rushing to catch up.
 **Tap markers:** any letter key you press is recorded with the song time.
 On exit they go to `taps/` along with the nearest bar and beat, which is
 the fastest way to find exactly where a section starts.
+
+## 7. The studio (preview in the browser)
+
+`python -m huemusic studio` runs a small local web server (127.0.0.1
+only, standard library, no dependencies), and the page is a single HTML
+file with no external libraries.
+
+- **Rendering up front.** Because `render(t)` is a pure function of time,
+  the server renders the whole song at 30 frames per second in one go.
+  That's about 6,000 frames × 10 lights × 3 bytes, roughly 170 KB, sent as
+  base64 together with the lights, sections and cues. The page never asks
+  Python again while playing, and what it shows is exactly what
+  `play` would send to the bridge.
+- **Sync with the audio.** The page plays `track.audio` in an `<audio>`
+  element. The server supports HTTP range requests, which seeking needs.
+  The animation reads `audio.currentTime` and extrapolates between its
+  updates, so movement stays smooth.
+- **Timeline.** Each pixel column covers a slice of time. It shows the
+  *brightest* frame in that slice, so short flashes stay visible when
+  zoomed out.
+- **Auto-reload.** The page asks for the preset file's modification time
+  every second, and re-renders when it changes. If the new version has an
+  error, the message is shown and the last working version stays
+  displayed.
+- **Refresh lights.** This re-reads the entertainment area from the bridge
+  (names and positions) into `config.json`. That's the same data
+  `setup-hue` saves, without re-pairing.
+- **Editing positions.**
+  - Dragging a light saves `x`/`y` to `config.json` (marked
+    `positions_modified`) and re-renders the show, because paths like
+    `circle` and `left`/`right` depend on the positions.
+  - **Push** writes them to the area's `locations.service_locations` with a
+    `PUT entertainment_configuration/<id>`. Each channel maps to its
+    entertainment service, the height (`z`) is kept, and services with
+    several positions (gradient strips) are left as they are.
+  - The bridge refuses the change while the area is streaming.
+  - **Flash** follows channel → entertainment service → device → light,
+    then sends `{"identify": {"action": "identify"}}` to that light.
 
 ## Files you'll see
 

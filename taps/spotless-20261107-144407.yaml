@@ -1,0 +1,2 @@
+# taps for Spotless, latency 0 ms. 'beat' = nearest beat on the grid.
+- {key: "v", at: "0:23.445", beat: "bar 13 beat 3", off: -0.121}

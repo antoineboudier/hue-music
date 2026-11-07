@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>huemusic studio</title>
+<style>
+  :root {
+    --bg: #0e0b1f;
+    --panel: #17142e;
+    --card: #1e1a3d;
+    --line: #2c2752;
+    --text: #f4f2ff;
+    --muted: #a9a3cf;
+    --accent: #ff2e9a;
+    --cyan: #00d1ff;
+    --amber: #ffb020;
+    --violet: #8b5cf6;
+    --warn: #ffb020;
+    --err: #ff5a5a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.4 system-ui, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; min-height: 100vh;
+  }
+  button, select {
+    font: inherit; color: var(--text); background: var(--card);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: var(--muted); }
+  button:focus-visible, select:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  .brand { font-weight: 700; font-size: 18px; letter-spacing: .2px; }
+  .brand span { color: var(--accent); }
+  #songinfo { color: var(--muted); }
+  .spacer { flex: 1; }
+  #status { color: var(--muted); font-size: 12px; }
+  #banner { margin: 10px 20px 0; padding: 10px 14px; border-radius: 8px; white-space: pre-wrap; font-size: 13px; }
+  #banner.error { background: #3a1020; border: 1px solid var(--err); }
+  #banner.warn { background: #33270b; border: 1px solid var(--warn); }
+  main { display: flex; gap: 16px; padding: 16px 20px 0; flex: 1; min-height: 340px; }
+  #roomPanel { flex: 1; min-width: 0; background: var(--panel); border-radius: 12px; position: relative; }
+  /* absolutely positioned so the canvas's pixel size can never stretch its panel */
+  #room { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; border-radius: 12px; }
+  #roomTools { z-index: 1; position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; max-width: calc(100% - 24px); }
+  #editBtn.on { background: var(--accent); color: #0e0b1f; border-color: var(--accent); font-weight: 600; }
+  #editTools { display: none; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #roomPanel.editing #editTools { display: flex; }
+  #roomPanel.editing #room { cursor: grab; }
+  #roomPanel.editing #room.grabbing { cursor: grabbing; }
+  .check { color: var(--muted); font-size: 13px; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  #pushBtn.dirty { border-color: var(--amber); color: var(--amber); }
+  #dirty { font-size: 12px; color: var(--muted); }
+  #dirty.dirty { color: var(--amber); }
+  button:disabled { opacity: .5; cursor: default; }
+  aside {
+    width: 280px; flex-shrink: 0; background: var(--panel); border-radius: 12px; padding: 16px;
+    display: flex; flex-direction: column; gap: 8px; overflow: auto;
+  }
+  .big { font: 600 30px/1.1 ui-monospace, Consolas, monospace; }
+  #pos { color: var(--muted); font-family: ui-monospace, Consolas, monospace; }
+  .chip { display: inline-block; padding: 2px 10px; border-radius: 999px; font-weight: 600; font-size: 13px; color: #0e0b1f; }
+  aside h3 { margin: 10px 0 2px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  #active { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  #active li { background: var(--card); border-radius: 6px; padding: 4px 8px; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
+  #active li.hit { outline: 1px solid var(--cyan); }
+  #active .fx { color: var(--amber); font-family: ui-monospace, Consolas, monospace; }
+  #active .n { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  #sel { font-size: 13px; color: var(--muted); }
+  #sel b { color: var(--text); }
+  .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; border: 1px solid var(--line); }
+  #transport { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 20px; }
+  #play { width: 44px; height: 36px; font-size: 16px; padding: 0; background: var(--accent); border: none; color: #0e0b1f; font-weight: 700; }
+  #time { font-family: ui-monospace, Consolas, monospace; color: var(--muted); }
+  #transport label { color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .hint { color: var(--muted); font-size: 12px; margin-left: auto; }
+  #timelineWrap { padding: 0 20px 18px; }
+  #timeline { width: 100%; display: block; background: var(--panel); border-radius: 12px; cursor: crosshair; }
+  #toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--card);
+    border: 1px solid var(--line); padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .3s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+  @media (max-width: 760px) {
+    main { flex-direction: column; flex: none; }
+    aside { width: auto; overflow: visible; }
+    #roomPanel { flex: none; height: 380px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span>BouBox</span> huemusic <span>studio</span></div>
+  <select id="preset" aria-label="Preset"></select>
+  <div id="songinfo"></div>
+  <div class="spacer"></div>
+  <span id="status"></span>
+  <button id="refreshLights" title="Re-read light names and positions from the Hue bridge">Refresh lights from bridge</button>
+</header>
+<div id="banner" hidden></div>
+<main>
+  <section id="roomPanel">
+    <canvas id="room" aria-label="Lights seen from above"></canvas>
+    <div id="roomTools">
+      <button id="editBtn">Edit positions</button>
+      <div id="editTools">
+        <label class="check"><input type="checkbox" id="flashChk" checked> Flash the real light on click</label>
+        <button id="pushBtn" title="Write these positions to the entertainment area on the bridge">Push to bridge</button>
+        <button id="resetBtn" title="Discard local changes and reload positions from the bridge">Reset from bridge</button>
+        <span id="dirty"></span>
+      </div>
+    </div>
+  </section>
+  <aside>
+    <div class="big" id="clock">0:00.00</div>
+    <div id="pos">bar 1 · beat 1</div>
+    <div><span id="section" class="chip" hidden></span></div>
+    <h3>Active cues</h3>
+    <ul id="active"></ul>
+    <h3>Selected light</h3>
+    <div id="sel">Click a light in the room or on the timeline.</div>
+  </aside>
+</main>
+<div id="transport">
+  <button id="play" aria-label="Play">▶</button>
+  <span id="time">0:00 / 0:00</span>
+  <label>Speed
+    <select id="speed">
+      <option value="1">1×</option><option value="0.75">0.75×</option>
+      <option value="0.5">0.5×</option><option value="0.25">0.25×</option>
+    </select>
+  </label>
+  <label>Zoom
+    <select id="zoom">
+      <option value="0">Whole song</option><option value="128">32 bars</option>
+      <option value="64">16 bars</option><option value="32">8 bars</option>
+      <option value="16">4 bars</option><option value="8">2 bars</option>
+    </select>
+  </label>
+  <span class="hint">Space play/pause · ←/→ one bar · click the timeline to seek</span>
+</div>
+<section id="timelineWrap"><canvas id="timeline" aria-label="Color of each light over time"></canvas></section>
+<audio id="audio" preload="auto"></audio>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const audio = $("audio");
+const roomCv = $("room"), tlCv = $("timeline");
+const LABEL_W = 170, TOP = 46, ROW_H = 22;
+
+let show = null;         // data from /api/show
+let frames = null;       // Uint8Array [frame][channel][rgb]
+let nCh = 0, nFrames = 0;
+let disp = [];           // display positions in the room (normalized, spread apart)
+let selected = null;     // selected channel index
+let playing = false, rate = 1;
+let anchorT = 0, anchorWall = 0, lastAudio = -1;
+let hoverX = null, dragging = false;
+let wholeImg = null;     // cached heatmap of the whole song
+let editing = false;     // position edit mode
+let drag = null;         // light being dragged in edit mode
+
+// ------------------------------------------------------------ utilities
+const fmt = (t, dec = 2) => {
+  t = Math.max(0, t);
+  const m = Math.floor(t / 60), s = t - m * 60;
+  return `${m}:${s.toFixed(dec).padStart(dec ? dec + 3 : 2, "0")}`;
+};
+const beatLen = () => 60 / show.bpm;
+function barBeat(t) {
+  const n = Math.floor((t - show.first_beat) / beatLen() + 1e-6);
+  return [Math.floor(n / 4) + 1, ((n % 4) + 4) % 4 + 1];
+}
+function sectionKind(name) {
+  const n = name.toLowerCase();
+  if (n.includes("drop")) return "drop";
+  if (n.includes("build") || n.includes("riser")) return "build";
+  return "calm";
+}
+const KIND_COLOR = { drop: "#ff2e9a", build: "#ffb020", calm: "#8b5cf6" };
+function sectionAt(t) { return show.sections.find((s) => s.start <= t && t < s.end); }
+function color(fi, ci) {
+  const k = (fi * nCh + ci) * 3;
+  return [frames[k], frames[k + 1], frames[k + 2]];
+}
+const frameAt = (t) => Math.max(0, Math.min(nFrames - 1, Math.floor(t * show.fps)));
+const lum = (c) => Math.max(c[0], c[1], c[2]) / 255;
+function toast(msg) {
+  const el = $("toast"); el.textContent = msg; el.classList.add("show");
+  clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("show"), 2200);
+}
+function banner(msg, kind) {
+  const b = $("banner");
+  if (!msg) { b.hidden = true; return; }
+  b.hidden = false; b.className = kind; b.textContent = msg;
+}
+
+// ------------------------------------------------------------ clock
+function now() {
+  if (!show) return 0;
+  if (playing && show.audio && !audio.paused) {
+    const at = audio.currentTime;
+    if (at !== lastAudio) { lastAudio = at; anchorT = at; anchorWall = performance.now(); }
+  }
+  if (!playing) return anchorT;
+  return anchorT + (performance.now() - anchorWall) / 1000 * rate;
+}
+function seek(t) {
+  t = Math.max(0, Math.min(show ? show.duration : 0, t));
+  anchorT = t; anchorWall = performance.now(); lastAudio = t;
+  if (show && show.audio) audio.currentTime = t;
+}
+function setPlaying(p) {
+  if (!show) return;
+  const t = now();
+  playing = p;
+  anchorT = t; anchorWall = performance.now();
+  $("play").textContent = p ? "❚❚" : "▶";
+  $("play").setAttribute("aria-label", p ? "Pause" : "Play");
+  if (show.audio) {
+    if (p) { audio.currentTime = t; audio.play().catch((e) => { toast("Audio couldn't start: " + e.message); }); }
+    else audio.pause();
+  }
+}
+
+// ------------------------------------------------------------ loading
+async function loadPresets() {
+  const list = await (await fetch("/api/presets")).json();
+  const sel = $("preset");
+  sel.innerHTML = "";
+  // one group per song, one entry per version (file)
+  const groups = new Map();
+  for (const p of list) {
+    const song = p.error ? "Invalid presets" : `${p.title}${p.artist ? " · " + p.artist : ""}`;
+    if (!groups.has(song)) groups.set(song, []);
+    groups.get(song).push(p);
+  }
+  for (const [song, items] of groups) {
+    const og = document.createElement("optgroup");
+    og.label = song;
+    for (const p of items) {
+      const o = document.createElement("option");
+      o.value = p.name;
+      o.textContent = p.name + (p.description ? " — " + p.description : "") + (p.error ? " (error)" : "");
+      og.appendChild(o);
+    }
+    sel.appendChild(og);
+  }
+  const want = new URLSearchParams(location.search).get("preset");
+  if (want && list.some((p) => p.name === want)) sel.value = want;
+  return sel.value;
+}
+
+async function loadShow(name, keepTime) {
+  $("status").textContent = "rendering…";
+  let data;
+  try {
+    const r = await fetch("/api/show?preset=" + encodeURIComponent(name));
+    data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.statusText);
+  } catch (e) {
+    banner("Couldn't load this preset:\n" + e.message + (show && show.name === name ? "\n(showing the last version that worked)" : ""), "error");
+    $("status").textContent = "error";
+    return;
+  }
+  const changedSong = !show || show.name !== name;
+  const t = keepTime ? now() : 0;
+  show = data;
+  const raw = atob(show.frames);
+  frames = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) frames[i] = raw.charCodeAt(i);
+  nCh = show.channels.length;
+  nFrames = Math.floor(frames.length / (nCh * 3));
+  wholeImg = null;
+  if (selected !== null && selected >= nCh) selected = null;
+  layoutRoom();
+  banner(show.warnings.length ? "Warnings:\n" + show.warnings.join("\n") : "", "warn");
+  $("songinfo").textContent = (show.based_on ? `based on ${show.based_on} · ` : "") +
+    `${show.bpm} BPM · ${fmt(show.duration, 0)} · ${nCh} lights` +
+    (show.area ? ` from “${show.area}”` : " (demo layout: run setup-hue)");
+  if (changedSong) {
+    if (playing) setPlaying(false);
+    if (show.audio) { audio.src = "/api/audio?preset=" + encodeURIComponent(name); audio.load(); }
+    else { audio.removeAttribute("src"); audio.load(); }
+    history.replaceState(null, "", "?preset=" + encodeURIComponent(name));
+  }
+  seek(Math.min(t, show.duration));
+  if (playing && show.audio) audio.play().catch(() => {});
+  $("status").textContent = (show.audio ? "" : "no audio file · ") + "updated " + new Date().toLocaleTimeString();
+  $("editBtn").disabled = !show.editable;
+  $("editBtn").title = show.editable ? "Drag lights to new positions" : "Run setup-hue first: this is a demo layout";
+  if (!show.editable && editing) setEditing(false);
+  updateDirty();
+  resize();
+}
+
+// ------------------------------------------------------------ room view
+function layoutRoom() {
+  // copy positions, then (except while editing, where we show the true
+  // positions) push apart lights that would overlap on screen
+  disp = show.channels.map((c) => ({ x: c.x, y: c.y, above: false }));
+  const MIN = 0.22;
+  for (let it = 0; it < 40 && !editing; it++) {
+    let moved = false;
+    for (let i = 0; i < disp.length; i++) for (let j = i + 1; j < disp.length; j++) {
+      const a = disp[i], b = disp[j];
+      let dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+      if (d >= MIN) continue;
+      if (d < 1e-6) { dx = 1; dy = 0; d = 1; }
+      const push = (MIN - d) / 2;
+      a.x -= dx / d * push; a.y -= dy / d * push; b.x += dx / d * push; b.y += dy / d * push;
+      moved = true;
+    }
+    if (!moved) break;
+  }
+  // labels go under each light; flip one above when two labels would collide
+  for (let i = 0; i < disp.length; i++) for (let j = 0; j < i; j++) {
+    const a = disp[i], b = disp[j];
+    if (!b.above && Math.abs(a.x - b.x) < 0.42 && Math.abs(a.y - b.y) < 0.14) { a.above = true; break; }
+  }
+}
+
+function roomGeom() {
+  const W = roomCv.clientWidth, H = roomCv.clientHeight;
+  const TOOLS = $("roomTools").offsetHeight + 34;  // keep the toolbar and "FRONT" clear of the room
+  const size = Math.max(120, Math.min(W - 40, H - TOOLS - 16));
+  const x0 = (W - size) / 2, y0 = TOOLS + (H - TOOLS - 16 - size) / 2;
+  const pad = size * 0.1;
+  return {
+    W, H, x0, y0, size,
+    px: (x) => x0 + pad + (x + 1) / 2 * (size - 2 * pad),
+    py: (y) => y0 + pad + (1 - y) / 2 * (size - 2 * pad),
+    ix: (px) => (px - x0 - pad) / (size - 2 * pad) * 2 - 1,   // screen -> room coordinates
+    iy: (py) => 1 - (py - y0 - pad) / (size - 2 * pad) * 2,
+    r: Math.max(9, size * 0.032),
+  };
+}
+
+function drawRoom(fi) {
+  const ctx = roomCv.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const g = roomGeom();
+  ctx.clearRect(0, 0, g.W, g.H);
+  // room outline
+  ctx.fillStyle = "#120f27";
+  ctx.strokeStyle = "#2c2752";
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect(g.x0, g.y0, g.size, g.size, 14); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#a9a3cf"; ctx.font = "11px system-ui, sans-serif"; ctx.textAlign = "center";
+  ctx.fillText("F R O N T", g.x0 + g.size / 2, g.y0 - 8);
+  // glows first (additive), then cores and labels
+  ctx.globalCompositeOperation = "lighter";
+  show.channels.forEach((c, i) => {
+    const col = color(fi, i), l = lum(col);
+    if (l < 0.02) return;
+    const x = g.px(disp[i].x), y = g.py(disp[i].y), R = g.r * (2.2 + 2.5 * l);
+    const grd = ctx.createRadialGradient(x, y, g.r * 0.5, x, y, R);
+    grd.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${0.55 * l})`);
+    grd.addColorStop(1, `rgba(${col[0]},${col[1]},${col[2]},0)`);
+    ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.globalCompositeOperation = "source-over";
+  if (editing) drawCirclePath(ctx, g);
+  show.channels.forEach((c, i) => {
+    const col = color(fi, i), l = lum(col);
+    const x = g.px(disp[i].x), y = g.py(disp[i].y);
+    ctx.beginPath(); ctx.arc(x, y, g.r, 0, Math.PI * 2);
+    ctx.fillStyle = l < 0.02 ? "#1b1836" : `rgb(${col[0]},${col[1]},${col[2]})`;
+    ctx.fill();
+    ctx.lineWidth = i === selected ? 3 : 1;
+    ctx.strokeStyle = i === selected ? "#ffffff" : "#3a3566";
+    ctx.stroke();
+    ctx.font = (i === selected ? "600 " : "") + "11px system-ui, sans-serif";
+    const ly = disp[i].above ? y - g.r - 7 : y + g.r + 14, label = c.name || `#${c.id}`;
+    ctx.lineWidth = 3; ctx.strokeStyle = "rgba(14,11,31,0.85)"; ctx.lineJoin = "round";
+    ctx.strokeText(label, x, ly);  // dark outline keeps names readable over bright glows
+    ctx.fillStyle = i === selected ? "#ffffff" : "#c9c4ea";
+    ctx.fillText(label, x, ly);
+  });
+}
+
+// The order `order: circle` will use: clockwise from the front, around the
+// lights' center (same formula as engine.arrange).
+function circleOrder() {
+  const n = show.channels.length;
+  const cx = show.channels.reduce((a, c) => a + c.x, 0) / n, cy = show.channels.reduce((a, c) => a + c.y, 0) / n;
+  const ang = (c) => ((Math.atan2(c.x - cx, c.y - cy) / (2 * Math.PI)) % 1 + 1) % 1;
+  return show.channels.map((c, i) => [ang(c), c.id, i]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((e) => e[2]);
+}
+
+function drawCirclePath(ctx, g) {
+  const order = circleOrder();
+  ctx.strokeStyle = "rgba(255,176,32,0.65)"; ctx.fillStyle = "rgba(255,176,32,0.9)"; ctx.lineWidth = 1.5;
+  order.forEach((i, k) => {
+    const j = order[(k + 1) % order.length];
+    const x1 = g.px(disp[i].x), y1 = g.py(disp[i].y), x2 = g.px(disp[j].x), y2 = g.py(disp[j].y);
+    const L = Math.hypot(x2 - x1, y2 - y1);
+    if (L > 2 * g.r + 10) {
+      const ux = (x2 - x1) / L, uy = (y2 - y1) / L;
+      const ax = x1 + ux * (g.r + 4), ay = y1 + uy * (g.r + 4), bx = x2 - ux * (g.r + 6), by = y2 - uy * (g.r + 6);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(bx, by);
+      ctx.lineTo(bx - ux * 9 - uy * 5, by - uy * 9 + ux * 5); ctx.lineTo(bx - ux * 9 + uy * 5, by - uy * 9 - ux * 5); ctx.fill();
+    }
+    // order number badge
+    const bx = g.px(disp[i].x) + g.r * 0.9, by = g.py(disp[i].y) - g.r * 0.9;
+    ctx.beginPath(); ctx.arc(bx, by, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#0e0b1f"; ctx.font = "600 10px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(String(k + 1), bx, by + 0.5);
+    ctx.fillStyle = "rgba(255,176,32,0.9)"; ctx.textBaseline = "alphabetic";
+  });
+}
+
+function hitLight(e) {
+  const g = roomGeom(), rect = roomCv.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  let best = null, bd = 1e9;
+  disp.forEach((p, i) => {
+    const d = Math.hypot(g.px(p.x) - mx, g.py(p.y) - my);
+    if (d < bd) { bd = d; best = i; }
+  });
+  return bd < g.r * 2 ? best : null;
+}
+
+roomCv.addEventListener("mousedown", (e) => {
+  if (!show) return;
+  const i = hitLight(e);
+  if (!editing) { selected = i === null || i === selected ? null : i; return; }
+  selected = i;
+  if (i !== null) { drag = { i, moved: false, x: e.clientX, y: e.clientY }; roomCv.classList.add("grabbing"); e.preventDefault(); }
+});
+window.addEventListener("mousemove", (e) => {
+  if (!drag) return;
+  if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 4) return;
+  drag.moved = true;
+  const g = roomGeom(), rect = roomCv.getBoundingClientRect();
+  const x = Math.max(-1, Math.min(1, g.ix(e.clientX - rect.left)));
+  const y = Math.max(-1, Math.min(1, g.iy(e.clientY - rect.top)));
+  const c = show.channels[drag.i];
+  c.x = x; c.y = y; disp[drag.i].x = x; disp[drag.i].y = y;
+});
+window.addEventListener("mouseup", async () => {
+  if (!drag) return;
+  const d = drag; drag = null; roomCv.classList.remove("grabbing");
+  const c = show.channels[d.i];
+  if (d.moved) {
+    await post("/api/positions", { positions: { [c.id]: { x: c.x, y: c.y } } }, "Couldn't save the position");
+    await loadShow(show.name, true);  // re-render: paths (circle, left/right) depend on positions
+  } else if ($("flashChk").checked) {
+    if (await post("/api/identify", { channel: c.id }, "Couldn't flash the light")) toast(`Flashing ${c.name || "#" + c.id}`);
+  }
+});
+
+async function post(url, body, errPrefix) {
+  try {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.statusText);
+    return d;
+  } catch (e) { toast(`${errPrefix}: ${e.message}`); return null; }
+}
+
+function setEditing(on) {
+  editing = on;
+  $("roomPanel").classList.toggle("editing", on);
+  $("editBtn").classList.toggle("on", on);
+  $("editBtn").textContent = on ? "Done" : "Edit positions";
+  if (show) layoutRoom();
+  if (on) toast("Drag the lights. Changes stay local until you push them.");
+}
+
+function updateDirty() {
+  const dirty = !!(show && show.positions_modified);
+  $("dirty").textContent = dirty ? "● local changes, not on the bridge yet" : "✓ same as the bridge";
+  $("dirty").classList.toggle("dirty", dirty);
+  $("pushBtn").classList.toggle("dirty", dirty);
+}
+
+// ------------------------------------------------------------ timeline
+function view() {
+  const span = +$("zoom").value * beatLen();
+  if (!span || span >= show.duration) return [0, show.duration];
+  const t = now();
+  const start = Math.max(0, Math.min(show.duration - span, t - span * 0.25));
+  return [start, start + span];
+}
+
+function heatmap(w, t0, t1) {
+  // one pixel column per screen column; brightest frame wins so flashes stay visible
+  const img = new ImageData(w, nCh);
+  const per = (t1 - t0) / w;
+  for (let x = 0; x < w; x++) {
+    const a = t0 + x * per, b = a + per;
+    const f0 = frameAt(a), f1 = Math.max(f0 + 1, Math.min(nFrames, Math.floor(b * show.fps)));
+    for (let ci = 0; ci < nCh; ci++) {
+      let best = -1, bc = null;
+      for (let f = f0; f < f1; f++) {
+        const c = color(f, ci), l = c[0] + c[1] + c[2];
+        if (l > best) { best = l; bc = c; }
+      }
+      const k = (ci * w + x) * 4;
+      img.data[k] = bc[0]; img.data[k + 1] = bc[1]; img.data[k + 2] = bc[2]; img.data[k + 3] = 255;
+    }
+  }
+  const cv = document.createElement("canvas");
+  cv.width = w; cv.height = nCh;
+  cv.getContext("2d").putImageData(img, 0, 0);
+  return cv;
+}
+
+function drawTimeline(t) {
+  const ctx = tlCv.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = tlCv.clientWidth, H = tlCv.clientHeight;
+  const plotW = W - LABEL_W - 12;
+  const [t0, t1] = view();
+  const X = (tt) => LABEL_W + (tt - t0) / (t1 - t0) * plotW;
+  ctx.clearRect(0, 0, W, H);
+
+  // sections band
+  ctx.font = "600 11px system-ui, sans-serif"; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+  for (const s of show.sections) {
+    if (s.end < t0 || s.start > t1) continue;
+    const a = Math.max(X(s.start), LABEL_W), b = Math.min(X(s.end), LABEL_W + plotW);
+    ctx.fillStyle = KIND_COLOR[sectionKind(s.name)];
+    ctx.globalAlpha = 0.85; ctx.fillRect(a, 8, Math.max(1, b - a - 1), 18); ctx.globalAlpha = 1;
+    if (b - a > ctx.measureText(s.name).width + 10) { ctx.fillStyle = "#0e0b1f"; ctx.fillText(s.name, a + 5, 17); }
+  }
+
+  // light rows
+  const rowsTop = TOP, rowsH = nCh * ROW_H;
+  let img;
+  if (+$("zoom").value === 0 || t1 - t0 >= show.duration) {
+    if (!wholeImg || wholeImg.width !== Math.round(plotW)) wholeImg = heatmap(Math.round(plotW), 0, show.duration);
+    img = wholeImg;
+  } else img = heatmap(Math.max(1, Math.round(plotW)), t0, t1);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, LABEL_W, rowsTop, plotW, rowsH);
+  ctx.strokeStyle = "#17142e"; ctx.lineWidth = 2;
+  for (let i = 1; i < nCh; i++) { ctx.beginPath(); ctx.moveTo(LABEL_W, rowsTop + i * ROW_H); ctx.lineTo(LABEL_W + plotW, rowsTop + i * ROW_H); ctx.stroke(); }
+
+  // bar grid + numbers
+  const bl = beatLen(), pxBar = 4 * bl / (t1 - t0) * plotW;
+  const step = [1, 2, 4, 8, 16, 32].find((s) => s * pxBar >= 48) || 64;
+  ctx.font = "10px ui-monospace, Consolas, monospace"; ctx.textAlign = "left";
+  const firstBar = Math.max(1, Math.floor((t0 - show.first_beat) / (4 * bl)) + 1);
+  for (let bar = firstBar; ; bar++) {
+    const tb = show.first_beat + (bar - 1) * 4 * bl;
+    if (tb > t1) break;
+    if (tb < t0) continue;
+    const x = X(tb);
+    if (pxBar >= 10) { ctx.fillStyle = "rgba(14,11,31,0.55)"; ctx.fillRect(x, rowsTop, 1, rowsH); }
+    if ((bar - 1) % step === 0) { ctx.fillStyle = "#a9a3cf"; ctx.fillText(String(bar), x + 2, rowsTop - 8); }
+  }
+  ctx.fillStyle = "#a9a3cf"; ctx.textAlign = "right"; ctx.fillText("bar", LABEL_W - 8, rowsTop - 8);
+
+  // labels (with the current color as a swatch)
+  const fi = frameAt(t);
+  ctx.font = "12px system-ui, sans-serif"; ctx.textAlign = "left";
+  show.channels.forEach((c, i) => {
+    const y = rowsTop + i * ROW_H;
+    if (i === selected) { ctx.fillStyle = "#2c2752"; ctx.fillRect(0, y, LABEL_W + plotW, ROW_H); ctx.drawImage(img, 0, i, img.width, 1, LABEL_W, y + 2, plotW, ROW_H - 4); }
+    const col = color(fi, i);
+    ctx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`; ctx.fillRect(10, y + 5, 12, 12);
+    ctx.strokeStyle = "#3a3566"; ctx.lineWidth = 1; ctx.strokeRect(10.5, y + 5.5, 11, 11);
+    ctx.fillStyle = i === selected ? "#ffffff" : "#d8d4f2";
+    let name = c.name || `#${c.id}`;
+    while (ctx.measureText(name).width > LABEL_W - 40 && name.length > 3) name = name.slice(0, -2) + "…";
+    ctx.fillText(name, 30, y + ROW_H / 2 + 1);
+  });
+
+  // hover readout
+  if (hoverX !== null && hoverX > LABEL_W) {
+    const ht = t0 + (hoverX - LABEL_W) / plotW * (t1 - t0);
+    ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.fillRect(hoverX, rowsTop, 1, rowsH);
+    const [b, bt] = barBeat(ht), s = sectionAt(ht);
+    const txt = `${fmt(ht)} · bar ${b}.${bt}${s ? " · " + s.name : ""}`;
+    ctx.font = "11px system-ui, sans-serif"; ctx.textAlign = "right"; ctx.fillStyle = "#ffffff";
+    ctx.fillText(txt, LABEL_W + plotW, rowsTop + rowsH + 12);
+  }
+
+  // playhead
+  if (t >= t0 && t <= t1) {
+    const x = X(t);
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(x - 1, 6, 2, rowsTop + rowsH - 6);
+    ctx.beginPath(); ctx.moveTo(x - 6, 2); ctx.lineTo(x + 6, 2); ctx.lineTo(x, 9); ctx.fill();
+  }
+}
+
+function tlTime(e) {
+  const rect = tlCv.getBoundingClientRect(), x = e.clientX - rect.left;
+  const plotW = tlCv.clientWidth - LABEL_W - 12, [t0, t1] = view();
+  return { x, y: e.clientY - rect.top, t: t0 + (x - LABEL_W) / plotW * (t1 - t0) };
+}
+tlCv.addEventListener("mousedown", (e) => {
+  if (!show) return;
+  const p = tlTime(e);
+  if (p.x < LABEL_W) {
+    const row = Math.floor((p.y - TOP) / ROW_H);
+    if (row >= 0 && row < nCh) selected = row === selected ? null : row;
+    return;
+  }
+  dragging = true; seek(p.t);
+});
+tlCv.addEventListener("mousemove", (e) => { if (!show) return; const p = tlTime(e); hoverX = p.x; if (dragging) seek(p.t); });
+tlCv.addEventListener("mouseleave", () => { hoverX = null; });
+window.addEventListener("mouseup", () => { dragging = false; });
+
+// ------------------------------------------------------------ info panel
+let lastInfo = "";
+function updateInfo(t) {
+  const [b, bt] = barBeat(t), s = sectionAt(t);
+  $("clock").textContent = fmt(t);
+  $("pos").textContent = t < show.first_beat - 1e-3 ? "before bar 1" : `bar ${b} · beat ${bt}`;
+  $("time").textContent = `${fmt(t, 0)} / ${fmt(show.duration, 0)}`;
+  const chip = $("section");
+  if (s) { chip.hidden = false; chip.textContent = s.name; chip.style.background = KIND_COLOR[sectionKind(s.name)]; }
+  else chip.hidden = true;
+
+  const selId = selected !== null ? show.channels[selected].id : null;
+  const active = show.cues.filter((c) => c.start <= t && t < c.end);
+  const key = active.map((c) => c.label + c.start).join("|") + "#" + selId;
+  if (key !== lastInfo) {
+    lastInfo = key;
+    const ul = $("active"); ul.innerHTML = "";
+    if (!active.length) { const li = document.createElement("li"); li.textContent = "none"; ul.appendChild(li); }
+    for (const c of active) {
+      const li = document.createElement("li");
+      if (selId !== null && c.lights.includes(selId)) li.className = "hit";
+      const a = document.createElement("span"); a.className = "fx"; a.textContent = c.label;
+      const n = document.createElement("span"); n.className = "n";
+      n.textContent = `${c.lights.length === nCh ? "all" : c.lights.length} light${c.lights.length > 1 ? "s" : ""} · ${c.blend}`;
+      li.append(a, n); ul.appendChild(li);
+    }
+  }
+  const sel = $("sel");
+  if (selected === null) { sel.textContent = "Click a light in the room or on the timeline."; return; }
+  const c = show.channels[selected], col = color(frameAt(t), selected);
+  const mine = active.filter((cu) => cu.lights.includes(c.id)).map((cu) => cu.label);
+  sel.innerHTML = "";
+  const sw = document.createElement("span"); sw.className = "swatch"; sw.style.background = `rgb(${col})`;
+  const name = document.createElement("b"); name.textContent = c.name || `#${c.id}`;
+  sel.append(sw, name, document.createElement("br"),
+    `channel ${c.id} · x ${c.x.toFixed(2)} · y ${c.y.toFixed(2)}`, document.createElement("br"),
+    `rgb(${col.join(", ")})`, document.createElement("br"),
+    mine.length ? "driven by: " + mine.join(", ") : "no cue on this light now");
+}
+
+// ------------------------------------------------------------ main loop
+// Canvas pixel buffers must match their on-screen size, or the drawing gets
+// stretched. Size the timeline first (its height changes the room panel's
+// height), then the room, and only touch a buffer when its size really changed.
+function setBuffer(cv, w, h) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = Math.max(1, Math.round(w * dpr)), H = Math.max(1, Math.round(h * dpr));
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; return true; }
+  return false;
+}
+function resize() {
+  if (show) {
+    const h = TOP + nCh * ROW_H + 22;
+    if (tlCv.style.height !== h + "px") tlCv.style.height = h + "px";
+    if (setBuffer(tlCv, tlCv.clientWidth, h)) wholeImg = null;
+  }
+  setBuffer(roomCv, roomCv.clientWidth, roomCv.clientHeight);
+}
+window.addEventListener("resize", resize);
+// also react to layout changes that aren't window resizes (banner shown, song loaded, zoom)
+new ResizeObserver(resize).observe($("roomPanel"));
+new ResizeObserver(resize).observe($("timelineWrap"));
+
+function loop() {
+  if (show && frames) {
+    let t = now();
+    if (t >= show.duration) { t = show.duration; if (playing) setPlaying(false); }
+    const fi = frameAt(t);
+    drawRoom(fi);
+    drawTimeline(t);
+    updateInfo(t);
+  }
+  requestAnimationFrame(loop);
+}
+
+// ------------------------------------------------------------ controls
+$("play").onclick = () => { if (show) { if (!playing && now() >= show.duration - 0.05) seek(0); setPlaying(!playing); } };
+$("speed").onchange = (e) => { const t = now(); rate = +e.target.value; audio.playbackRate = rate; anchorT = t; anchorWall = performance.now(); };
+$("zoom").onchange = () => { wholeImg = null; };
+$("preset").onchange = (e) => loadShow(e.target.value, false);
+$("refreshLights").onclick = async () => {
+  const btn = $("refreshLights"); btn.disabled = true; btn.textContent = "Asking the bridge…";
+  try {
+    const r = await fetch("/api/refresh-lights", { method: "POST" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    toast(`${d.channels} lights updated from the bridge`);
+    await loadShow(show.name, true);
+  } catch (e) { toast("Couldn't refresh: " + e.message); }
+  btn.disabled = false; btn.textContent = "Refresh lights from bridge";
+};
+$("editBtn").onclick = () => setEditing(!editing);
+$("pushBtn").onclick = async () => {
+  if (!confirm(`Write these positions to the entertainment area "${show.area}" on the bridge?\n\n` +
+               "The Hue app and Hue Sync use the same area, so they will see the new layout too. Heights are kept.")) return;
+  const btn = $("pushBtn"); btn.disabled = true;
+  const d = await post("/api/push-positions", {}, "Couldn't push");
+  if (d) {
+    toast(`${d.updated} light positions written to the bridge` + (d.skipped ? ` (${d.skipped} gradient lights skipped)` : ""));
+    await loadShow(show.name, true);
+  }
+  btn.disabled = false;
+};
+$("resetBtn").onclick = async () => {
+  if (show.positions_modified && !confirm("Discard your local changes and reload the positions from the bridge?")) return;
+  if (await post("/api/refresh-lights", {}, "Couldn't reach the bridge")) { toast("Positions reloaded from the bridge"); await loadShow(show.name, true); }
+};
+window.addEventListener("keydown", (e) => {
+  if (!show || e.target.tagName === "SELECT") return;
+  if (e.code === "Space") { e.preventDefault(); $("play").click(); }
+  else if (e.code === "ArrowRight") { e.preventDefault(); seek(now() + 4 * beatLen()); }
+  else if (e.code === "ArrowLeft") { e.preventDefault(); seek(now() - 4 * beatLen()); }
+  else if (e.code === "Home") { seek(0); }
+});
+
+// auto-reload when the preset file is saved
+let seenMtime = null;  // last file version we tried, even if it failed to load
+setInterval(async () => {
+  if (!show) return;
+  try {
+    const r = await fetch("/api/mtime?preset=" + encodeURIComponent(show.name));
+    const d = await r.json();
+    if (r.ok && d.mtime !== show.mtime && d.mtime !== seenMtime) {
+      seenMtime = d.mtime;
+      await loadShow(show.name, true);
+      if (show.mtime === d.mtime) toast("Preset reloaded");
+    }
+  } catch (e) { /* server stopped */ }
+}, 1000);
+
+(async () => {
+  const params = new URLSearchParams(location.search);  // read before the URL is rewritten
+  const t0 = parseFloat(params.get("t"));
+  if (params.get("zoom") && [...$("zoom").options].some((o) => o.value === params.get("zoom"))) $("zoom").value = params.get("zoom");
+  const name = await loadPresets();
+  if (name) {
+    await loadShow(name, false);
+    if (show && !isNaN(t0)) seek(t0);
+    if (show && show.editable && params.get("edit") === "1") setEditing(true);
+  } else banner("No presets found in the presets folder.", "error");
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

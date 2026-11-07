@@ -290,6 +290,25 @@ stages gives 2 bars per stage. With a short build (4 bars), start faster:
 
 ## 7. Watch, listen, adjust
 
+The quickest loop is the **studio**: open it next to your editor, and it
+re-renders every time you save the preset.
+
+```powershell
+python -m huemusic studio dramma
+```
+
+- The **room view** shows each light at its real position, in sync with
+  the MP3.
+- The **timeline** has one row per light for the whole song. A light that
+  stays dark, a section that looks like its neighbours, or a drop that
+  isn't brighter than its build-up are visible at a glance, without
+  playing anything.
+- **Zoom** to 2–8 bars and use **0.5× speed** to check fast moves (chases,
+  strobes) beat by beat.
+- **Click a light** to see which cues are driving it right now.
+
+Then confirm on the real lights:
+
 ```powershell
 python -m huemusic play dramma --mp3 --start "drop1 - 4 bars"
 ```

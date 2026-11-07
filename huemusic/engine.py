@@ -113,6 +113,11 @@ class Show:
             self._cues.append((cue, ordered, pos, cyclic))
 
     @property
+    def cue_targets(self) -> list[tuple[Cue, list[Channel]]]:
+        """Each cue with the lights it drives (in path order)."""
+        return [(cue, chs) for cue, chs, _, _ in self._cues]
+
+    @property
     def duration(self) -> float | None:
         if self.preset.duration:
             return self.preset.duration

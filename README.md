@@ -74,14 +74,43 @@ Keys while playing:
 | `+` / `-` | latency +/- 10 ms, if the lights are early/late (saved per device) |
 | any letter | tap marker, saved to `taps/` with the nearest bar/beat |
 
+## Studio: preview without the lights
+
+```powershell
+python -m huemusic studio spotless
+```
+
+This opens a page in your browser showing:
+- your lights seen from above, at their entertainment-area positions, animated in sync with the song's MP3;
+- a timeline with one row per light, showing its color through the whole song, with the sections above it.
+
+You can play, pause, seek, slow down (down to 0.25×) and zoom in to a few bars. Click a light to see which cues drive it. Keep the page open while you edit a preset: it refreshes when you save.
+
+**Editing light positions:** click **Edit positions**, then:
+- drag the lights; the numbered arrows show the order a circle will follow;
+- click a light without dragging to make the real one blink;
+- changes are saved in `config.json` and used right away by the studio and `play`;
+- **Push to bridge** writes them to the entertainment area, so the Hue app and Hue Sync use them too; heights are kept, and gradient strips are left unchanged;
+- **Reset from bridge** discards your local changes.
+
 ## New song in short
 
 ```powershell
 python -m huemusic analyze "mp3/My Song.mp3"   # tempo, bar grid, energy per bar
 # write presets/my-song.yaml (see docs/creating-a-preset.md)
 python -m huemusic check my-song                # validate and print the timeline
+python -m huemusic studio my-song               # watch it in the browser while you edit
 python -m huemusic play my-song --mp3 --start drop1
 ```
+
+## Several versions of a song
+
+```powershell
+python -m huemusic new spotless-v2 --from spotless -d "more strobes"
+python -m huemusic list                         # presets grouped by song
+```
+
+`spotless-v2.yaml` contains `based_on: spotless`: it reuses the song's header, sections and palette, and starts with a copy of the cues for you to change. See [Preset reference](docs/preset-reference.md#several-versions-of-a-song).
 
 ## Other commands
 

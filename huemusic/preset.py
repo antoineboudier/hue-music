@@ -175,6 +175,13 @@ class Preset:
     sections: dict[str, tuple[float, float]] = field(default_factory=dict)
     groups: dict[str, object] = field(default_factory=dict)
     cues: list[Cue] = field(default_factory=list)
+    description: str = ""
+    based_on: str | None = None
+    files: list[Path] = field(default_factory=list)  # this file + the files it's based on
+
+    @property
+    def name(self) -> str:
+        return self.path.stem
 
     def section_at(self, t: float) -> str:
         for name, (a, b) in self.sections.items():
@@ -186,12 +193,48 @@ class Preset:
 BLENDS = {"over", "add", "max"}
 
 
-def load(path: str | Path) -> Preset:
-    path = Path(path)
+MERGED_MAPS = ("track", "palette", "groups", "sections")
+
+
+def _read_raw(path: Path, chain: tuple[Path, ...] = ()) -> tuple[dict, list[Path]]:
+    """Read a preset file, resolving `based_on:` (recursively).
+
+    A variant inherits everything from its base. `track`, `palette`,
+    `groups` and `sections` are merged key by key (the variant wins). `cues`
+    are replaced by the variant's own, unless it sets `inherit_cues: true`,
+    in which case its cues are drawn on top of the base's.
+    """
+    if path.resolve() in chain:
+        names = " -> ".join(p.stem for p in chain + (path.resolve(),))
+        raise PresetError(f"based_on loop: {names}")
+    if not path.exists():
+        raise PresetError(f"preset file not found: {path}")
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as e:
         raise PresetError(f"{path.name}: invalid YAML: {e}") from e
+    base_name = raw.get("based_on")
+    if not base_name:
+        return raw, [path]
+    base_path = path.parent / (base_name if str(base_name).endswith(".yaml") else f"{base_name}.yaml")
+    try:
+        base, files = _read_raw(base_path, chain + (path.resolve(),))
+    except PresetError as e:
+        raise PresetError(f"{path.name}: based_on {base_name!r}: {e}") from e
+    merged = {k: v for k, v in base.items() if k not in ("description", "based_on", "inherit_cues")}
+    for key, value in raw.items():
+        if key in MERGED_MAPS and isinstance(value, dict):
+            merged[key] = {**(base.get(key) or {}), **value}
+        elif key == "cues":
+            merged["cues"] = (list(base.get("cues") or []) if raw.get("inherit_cues") else []) + list(value or [])
+        else:
+            merged[key] = value
+    return merged, [path] + files
+
+
+def load(path: str | Path) -> Preset:
+    path = Path(path)
+    raw, files = _read_raw(path)
 
     track = raw.get("track") or {}
     if "bpm" not in track:
@@ -295,6 +338,9 @@ def load(path: str | Path) -> Preset:
         sections=sections,
         groups=raw.get("groups") or {},
         cues=cues,
+        description=str(raw.get("description") or ""),
+        based_on=raw.get("based_on") or None,
+        files=files,
     )
 
 

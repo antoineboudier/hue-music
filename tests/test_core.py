@@ -172,6 +172,103 @@ def test_spotless_preset_loads():
         t += 0.05
 
 
+def test_studio_parse_range():
+    from huemusic.studio import parse_range
+
+    assert parse_range(None, 100) is None
+    assert parse_range("bytes=0-", 100) == (0, 99)
+    assert parse_range("bytes=10-19", 100) == (10, 19)
+    assert parse_range("bytes=-10", 100) == (90, 99)
+    assert parse_range("bytes=50-500", 100) == (50, 99)
+    assert parse_range("bytes=200-", 100) is None
+
+
+def test_studio_render_show():
+    import base64
+
+    from huemusic import studio
+
+    d = studio.render_show("spotless", fps=10)
+    n_ch = len(d["channels"])
+    frames = base64.b64decode(d["frames"])
+    assert len(frames) == (int(d["duration"] * 10) + 1) * n_ch * 3
+    assert {s["name"] for s in d["sections"]} >= {"intro", "drop1", "drop2"}
+    assert all(set(c) >= {"label", "start", "end", "lights"} for c in d["cues"])
+    with pytest.raises(studio.NotFound):
+        studio.preset_file("../config")
+
+
+def test_studio_save_positions_is_local(tmp_path, monkeypatch):
+    import json
+
+    from huemusic import studio
+
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(json.dumps({"hue": {"channels": [{"id": 3, "name": "a", "x": 0, "y": 0, "z": 0.5}]}}))
+    monkeypatch.setattr(config, "CONFIG_PATH", cfg_path)
+    studio.save_positions({"3": {"x": 0.5, "y": -2}})
+    saved = json.loads(cfg_path.read_text())["hue"]
+    assert saved["channels"][0] == {"id": 3, "name": "a", "x": 0.5, "y": -1.0, "z": 0.5}  # clamped, z kept
+    assert saved["positions_modified"] is True
+
+
+def test_bridge_set_positions_keeps_height_and_gradients():
+    sent = {}
+
+    class FakeBridge(hue.Bridge):
+        def __init__(self):
+            pass
+
+        def put(self, path, body):
+            sent["path"], sent["body"] = path, body
+
+    area = {"id": "A", "locations": {"service_locations": [
+        {"service": {"rid": "s1", "rtype": "entertainment"}, "positions": [{"x": 0, "y": 0, "z": 0.7}], "equalization_factor": 1},
+        {"service": {"rid": "g1", "rtype": "entertainment"}, "positions": [{"x": 0, "y": 0, "z": 0}, {"x": 1, "y": 0, "z": 0}]},
+    ]}}
+    updated, skipped = FakeBridge().set_positions(area, {"s1": (0.25, -0.5), "g1": (1, 1)})
+    assert (updated, skipped) == (1, ["g1"])
+    locs = sent["body"]["locations"]["service_locations"]
+    assert sent["path"] == "entertainment_configuration/A"
+    assert locs[0]["positions"] == [{"x": 0.25, "y": -0.5, "z": 0.7}]
+    assert len(locs[1]["positions"]) == 2  # gradient strip untouched
+
+
+def test_based_on_variant(tmp_path):
+    (tmp_path / "base.yaml").write_text(
+        "track: {title: T, artist: A, bpm: 120, first_beat: 1.0, duration: 60}\n"
+        "palette: {mine: '#ff0000', other: '#00ff00'}\n"
+        "sections: {intro: bar 1, drop: bar 3}\n"
+        "cues:\n  - {in: intro, effect: solid, color: mine}\n")
+    (tmp_path / "v2.yaml").write_text(
+        "based_on: base\ndescription: blue version\n"
+        "palette: {mine: '#0000ff'}\n"
+        "sections: {outro: bar 5}\n"
+        "cues:\n  - {in: drop, effect: solid, color: other}\n")
+    (tmp_path / "v3.yaml").write_text(
+        "based_on: v2\ninherit_cues: true\n"
+        "cues:\n  - {in: intro, effect: blackout}\n")
+    v2 = preset.load(tmp_path / "v2.yaml")
+    assert v2.description == "blue version" and v2.based_on == "base"
+    assert v2.palette["mine"] == (0, 0, 1) and v2.palette["other"] == (0, 1, 0)  # merged, variant wins
+    assert list(v2.sections) == ["intro", "drop", "outro"] and v2.grid.bpm == 120
+    assert [c.label for c in v2.cues] == ["solid"] and v2.cues[0].start == 5.0  # own cues replace the base's
+    assert [f.stem for f in v2.files] == ["v2", "base"]
+    v3 = preset.load(tmp_path / "v3.yaml")
+    assert [c.effect.name for c in v3.cues] == ["solid", "blackout"]  # v2's cues + its own
+    assert v3.description == ""  # not inherited
+
+
+def test_based_on_errors(tmp_path):
+    (tmp_path / "a.yaml").write_text("based_on: b\n")
+    (tmp_path / "b.yaml").write_text("based_on: a\n")
+    with pytest.raises(preset.PresetError, match="loop"):
+        preset.load(tmp_path / "a.yaml")
+    (tmp_path / "c.yaml").write_text("based_on: missing\n")
+    with pytest.raises(preset.PresetError, match="not found"):
+        preset.load(tmp_path / "c.yaml")
+
+
 def test_write_spotify_uri(tmp_path):
     p = tmp_path / "x.yaml"
     p.write_text("track:\n  spotify_uri:              # filled automatically\n  bpm: 1\n")
