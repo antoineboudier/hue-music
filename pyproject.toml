@@ -13,6 +13,8 @@ dependencies = [
     "python-mbedtls>=2.9",
     "PyYAML>=6.0",
     "numpy>=1.24",
+    "sounddevice>=0.4",
+    "soundfile>=0.12",
 ]
 
 [project.optional-dependencies]

@@ -104,6 +104,53 @@ def test_selectors():
     assert ids("mine", {"mine": [1, 3]}) == [1, 3]
 
 
+def test_steps_elapsed_doubling():
+    from huemusic.effects import steps_elapsed
+
+    # 32 beats, 1 -> 1/8 beat per step: 4 stages of 8 beats at 1, 2, 4, 8 steps/beat
+    f = lambda b: steps_elapsed(b, 32, 1, 0.125, "doubling")
+    assert f(8) == pytest.approx(8)
+    assert f(16) == pytest.approx(8 + 16)
+    assert f(24) == pytest.approx(8 + 16 + 32)
+    assert f(32) == pytest.approx(8 + 16 + 32 + 64)
+    assert steps_elapsed(4, 32, 2, None, "linear") == 2  # constant speed
+    lin = lambda b: steps_elapsed(b, 32, 1, 0.25, "linear")
+    assert lin(32) == pytest.approx((1 + 4) / 2 * 32)  # average rate x duration
+
+
+def test_circle_order():
+    # front, right, back, left of the room -> clockwise from the front
+    chs = [Channel(1, "back", 0, -1), Channel(2, "left", -1, 0), Channel(3, "front", 0, 1), Channel(4, "right", 1, 0)]
+    ordered, pos, cyclic = engine.arrange(chs, "circle", {})
+    assert [c.name for c in ordered] == ["front", "right", "back", "left"]
+    assert cyclic and pos[3] == pytest.approx(0.0) and pos[4] == pytest.approx(0.25)
+    ordered, _, _ = engine.arrange(chs, [2, "front"], {})
+    assert [c.id for c in ordered] == [2, 3, 1, 4]  # listed first, rest appended
+
+
+def test_chase_circle_with_tail(tmp_path):
+    p = preset.load(_write(tmp_path, """
+cues:
+  - {at: bar 1, until: bar 3, order: circle, effect: chase, every: 1, tail: 1}
+"""))
+    chs = [Channel(1, "back", 0, -1), Channel(2, "left", -1, 0), Channel(3, "front", 0, 1), Channel(4, "right", 1, 0)]
+    show = engine.Show(p, chs)
+    frame, _ = show.render(1.0 + 0.5 * 1 + 0.01)   # step 1: head on "right", tail on "front"
+    assert frame[4] == pytest.approx((1, 1, 1))
+    assert frame[3] == pytest.approx((0.5, 0.5, 0.5))
+    assert frame[1] == frame[2] == (0, 0, 0)
+
+
+def test_sweep_wraps_on_circle(tmp_path):
+    p = preset.load(_write(tmp_path, """
+cues:
+  - {at: bar 1, until: bar 2, order: circle, effect: sweep, every: 4, width: 0.3}
+"""))
+    chs = [Channel(1, "back", 0, -1), Channel(2, "left", -1, 0), Channel(3, "front", 0, 1), Channel(4, "right", 1, 0)]
+    frame, _ = engine.Show(p, chs).render(1.0 + 2.0 * 0.95)  # band at 0.95: near "front" (0.0)
+    assert frame[3][0] > 0.7 and frame[2][0] > 0  # front lit through the wrap, left partly
+
+
 def test_stream_message():
     area = "12345678-1234-1234-1234-123456789abc"
     msg = hue.build_message(area, {0: (1.0, 0.0, 0.5), 7: (0.0, 1.0, 0.0)})
