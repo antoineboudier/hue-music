@@ -152,6 +152,8 @@ class Cue:
     fade_out: float = 0.0
     intensity: float = 1.0
     label: str = ""
+    source: Path | None = None   # file that defines the cue (a base file, if inherited)
+    line: int = 0                # 1-based line of the cue in that file
 
     def envelope(self, t: float) -> float:
         k = self.intensity
@@ -196,13 +198,25 @@ BLENDS = {"over", "add", "max"}
 MERGED_MAPS = ("track", "palette", "groups", "sections")
 
 
-def _read_raw(path: Path, chain: tuple[Path, ...] = ()) -> tuple[dict, list[Path]]:
+def _cue_lines(text: str) -> list[int]:
+    """1-based line number of each item of a file's top-level `cues:` list."""
+    root = yaml.compose(text)
+    if isinstance(root, yaml.MappingNode):
+        for key, value in reversed(root.value):  # a repeated key: the last one counts, as when loading
+            if key.value == "cues":
+                return [item.start_mark.line + 1 for item in value.value] if isinstance(value, yaml.SequenceNode) else []
+    return []
+
+
+def _read_raw(path: Path, chain: tuple[Path, ...] = ()) -> tuple[dict, list[Path], list[tuple[Path, int]]]:
     """Read a preset file, resolving `based_on:` (recursively).
 
     A variant inherits everything from its base. `track`, `palette`,
     `groups` and `sections` are merged key by key (the variant wins). `cues`
     are replaced by the variant's own, unless it sets `inherit_cues: true`,
     in which case its cues are drawn on top of the base's.
+
+    Returns (merged data, files read, (file, line) of each merged cue).
     """
     if path.resolve() in chain:
         names = " -> ".join(p.stem for p in chain + (path.resolve(),))
@@ -210,15 +224,17 @@ def _read_raw(path: Path, chain: tuple[Path, ...] = ()) -> tuple[dict, list[Path
     if not path.exists():
         raise PresetError(f"preset file not found: {path}")
     try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        text = path.read_text(encoding="utf-8")
+        raw = yaml.safe_load(text) or {}
+        sources = [(path, line) for line in _cue_lines(text)]
     except yaml.YAMLError as e:
         raise PresetError(f"{path.name}: invalid YAML: {e}") from e
     base_name = raw.get("based_on")
     if not base_name:
-        return raw, [path]
+        return raw, [path], sources
     base_path = path.parent / (base_name if str(base_name).endswith(".yaml") else f"{base_name}.yaml")
     try:
-        base, files = _read_raw(base_path, chain + (path.resolve(),))
+        base, files, base_sources = _read_raw(base_path, chain + (path.resolve(),))
     except PresetError as e:
         raise PresetError(f"{path.name}: based_on {base_name!r}: {e}") from e
     merged = {k: v for k, v in base.items() if k not in ("description", "based_on", "inherit_cues")}
@@ -229,12 +245,16 @@ def _read_raw(path: Path, chain: tuple[Path, ...] = ()) -> tuple[dict, list[Path
             merged["cues"] = (list(base.get("cues") or []) if raw.get("inherit_cues") else []) + list(value or [])
         else:
             merged[key] = value
-    return merged, [path] + files
+    if "cues" not in raw:
+        sources = base_sources
+    elif raw.get("inherit_cues"):
+        sources = base_sources + sources
+    return merged, [path] + files, sources
 
 
 def load(path: str | Path) -> Preset:
     path = Path(path)
-    raw, files = _read_raw(path)
+    raw, files, sources = _read_raw(path)
 
     track = raw.get("track") or {}
     if "bpm" not in track:
@@ -329,6 +349,8 @@ def load(path: str | Path) -> Preset:
                 intensity=float(spec.pop("intensity", 1.0)),
                 label=str(spec.pop("label", "") or name),
                 effect=None,  # type: ignore[arg-type]
+                source=sources[i][0] if i < len(sources) else path,
+                line=sources[i][1] if i < len(sources) else 0,
             )
             cue.effect = EFFECTS[name](spec, parse_param)
             cue.effect.seed = i

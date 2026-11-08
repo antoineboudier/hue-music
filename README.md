@@ -87,6 +87,11 @@ This opens a page in your browser showing:
 
 You can play, pause, seek, slow down (down to 0.25×) and zoom in to a few bars. Click a light to see which cues drive it. Keep the page open while you edit a preset: it refreshes when you save.
 
+**Finding a cue:** the bars under the light rows are the preset's cues, tinted with their colors.
+- Click a cue to outline its lights in the room and on the timeline, and see its details in the side panel.
+- Double-click it, or use the link in the panel, to open the YAML at that line in VS Code. The browser asks for permission the first time.
+- Select a light to dim the cues that don't drive it. Esc clears the selected cue.
+
 **Checking the beat grid:**
 - **♩ Metronome** clicks on every beat of the preset's grid, with an accent on beat 1, mixed with the song.
 - If the clicks are early or late against the kick, nudge the grid with **−10 / +10 ms** (or `[` `]`), then **Save grid** to write `first_beat` into the preset. The bar lines move as you nudge; the lights follow once you save.

@@ -23,7 +23,7 @@ sections:
   pickup:    bar 1
   intro:     bar 2
   verse:     bar 10
-  build1:    bar 22
+  build1:    bar 18
   drop1:     bar 26
   lull1:     bar 38
   drop1b:    bar 42
@@ -104,6 +104,20 @@ cues:
     curve: doubling
     tail: 2
     blend: add
+
+  # ------------------------------------------- pre-drop fill (bar 25)
+  - at: drop1 - 1 bar             # 4 drums, 3/4 of a beat apart, around the room
+    until: drop1
+    effect: sequence
+    step: 0.25
+    pattern: "F - - L - - R - - B - - . . . ."
+    colors: [crimson, crimson, amber, gold]
+
+  - at: drop1 - 1 beat            # snare on beat 4: everything, fading out into the drop
+    until: drop1
+    effect: solid
+    color: bone
+    fade_out: 0.75 beats
 
   # ------------------------------------------------------------ drop 1
   - in: drop1                     # crimson / amber pump

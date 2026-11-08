@@ -43,6 +43,12 @@ cues:
     intensity: 0.6
     fade_in: 2 beats
 
+  - at: bar 12 beat 1
+    dur: 0.5s
+    effect: solid
+    color: white
+    fade_out: 0.5s
+
   # The melody: 6 notes (beats 3, 3.5, 3.75, 4, 4.5, 1) then 1 note on beat 2,
   # repeating every bar. The 6 notes walk around the room, one light each...
   - at: bar 12 beat 3
@@ -96,6 +102,15 @@ cues:
     decay: 0.9
     background: deep
 
+  # The big pre-drop sound (bar 35 beat 4): all lights jump to white and
+  # fall quickly to black, so the first pulse of the drop hits from darkness.
+  - at: drop1 - 1 beat
+    until: drop1
+    effect: fade
+    from: white
+    to: black
+    ease: out
+
   # ------------------------------------------------------------ drop 1
   - in: drop1                     # pumping two-color pulse
     effect: pulse
@@ -119,6 +134,15 @@ cues:
     colors: [cyan, violet]
     every: 1
     blend: max
+
+  - at: drop1 + 7 bars            # bar 43: strobe bouncing between the room
+    dur: 1 bar                    # halves on 16ths, the whole room on beat 4
+    effect: sequence
+    step: 0.125                   # hard flashes: on for a 32nd, black for a 32nd
+    pattern: "L . R . L . R .  L . R . L . R .  L . R . L . R .  A . A . A . A ."
+    color: white
+    decay: 0
+    background: black
 
   - at: drop1.end - 1 bar         # last bar: fast strobe
     until: drop1.end
@@ -182,18 +206,42 @@ cues:
     tail: 3
     blend: add
 
-  - at: build2.end - 2 bars       # last 2 bars: full-room strobe takes over
-    until: build2.end
+  - at: build2.end - 2 bars       # bar 76: the chase carries on at top speed
+    dur: 1 bar                    # (separate cue, so the speed-ups above stay
+    order: circle                 # on the bar lines)
+    effect: chase
+    colors: [magenta, white]
+    direction: backward
+    every: 0.25
+    tail: 3
+    blend: add
+
+  - at: build2.end - 2 bars       # full-room strobe joins the chase in bar 76
+    until: bar 77
     effect: strobe
     color: white
     rate: 2
-    rate_end: 8
+    rate_end: 5.43
     duty: 0.3
     blend: add
 
-  - at: drop2 - 2 beats
+  # Bar 77, beats 1-3: the two-note figure (on the beat and the next 16th,
+  # then silence). One flash per note, left then right, dark in between.
+  - at: bar 77
+    until: bar 77 beat 4
+    effect: sequence
+    step: 0.25
+    pattern: "L R . ."
+    colors: [magenta, white]
+    decay: 0
+    background: black
+
+  - at: drop2 - 1 beat            # same pre-drop fade as build 1, on beat 4
     until: drop2
-    effect: blackout
+    effect: fade
+    from: white
+    to: black
+    ease: out
 
   # ------------------------------------------------------------ drop 2
   - at: drop2                     # full color wheel spinning around the room
@@ -211,6 +259,15 @@ cues:
     decay: 0.35
     intensity: 0.8
     blend: add
+
+  - at: drop2 + 7 bars            # bar 85: same strobe as bar 43, halves
+    dur: 1 bar                    # bouncing, the whole room on beat 4
+    effect: sequence
+    step: 0.125
+    pattern: "L . R . L . R .  L . R . L . R .  L . R . L . R .  A . A . A . A ."
+    color: white
+    decay: 0
+    background: black
 
   - at: drop2 + 8 bars            # second half: magenta / cyan halves
     until: drop2.end

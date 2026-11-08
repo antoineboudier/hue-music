@@ -82,7 +82,14 @@
   aside h3 { margin: 10px 0 2px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
   #active { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
   #active li { background: var(--card); border-radius: 6px; padding: 4px 8px; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
+  #active li { cursor: pointer; }
   #active li.hit { outline: 1px solid var(--cyan); }
+  #active li.picked { background: var(--select); }
+  #cueInfo { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  #cueInfo b { color: var(--text); }
+  #cueInfo .fx { color: var(--amber); font-family: ui-monospace, Consolas, monospace; }
+  #cueInfo .swatch { margin-right: 3px; }
+  #cueInfo a { color: var(--cyan); }
   #active .fx { color: var(--amber); font-family: ui-monospace, Consolas, monospace; }
   #active .n { color: var(--muted); font-size: 12px; white-space: nowrap; }
   #sel { font-size: 13px; color: var(--muted); }
@@ -153,6 +160,8 @@
     <div class="big" id="clock">0:00.00</div>
     <div id="pos">bar 1 · beat 1</div>
     <div><span id="section" class="chip" hidden></span></div>
+    <h3>Selected cue</h3>
+    <div id="cueInfo"></div>
     <h3>Active cues</h3>
     <ul id="active"></ul>
     <h3>Selected light</h3>
@@ -212,6 +221,7 @@ const audio = $("audio");
 const roomCv = $("room"), tlCv = $("timeline");
 const LABEL_W = 170, TOP = 78, ROW_H = 22;
 const LANE_Y = 32, LANE_H = 28;   // "sounds" track, between the sections band and the light rows
+const CUE_H = 16, CUE_GAP = 2;    // cue lanes, under the light rows
 const TAP_KEYS = { L: "L", R: "R", F: "F", B: "B", A: "A", N: ">", P: "<" };
 
 let show = null;         // data from /api/show
@@ -219,9 +229,11 @@ let frames = null;       // Uint8Array [frame][channel][rgb]
 let nCh = 0, nFrames = 0;
 let disp = [];           // display positions in the room (normalized, spread apart)
 let selected = null;     // selected channel index
+let selCue = null;       // selected cue index
+let nLanes = 0;          // number of cue lanes
 let playing = false, rate = 1;
 let anchorT = 0, anchorWall = 0, lastAudio = -1;
-let hoverX = null, dragging = false;
+let hoverX = null, hoverY = 0, dragging = false;
 let wholeImg = null;     // cached heatmap of the whole song
 let editing = false;     // position edit mode
 let drag = null;         // light being dragged in edit mode
@@ -252,7 +264,7 @@ const V = (name) => _css.getPropertyValue("--" + name).trim();
 const C = {
   bg: V("bg"), panel: V("panel"), line: V("line"), muted: V("muted"), room: V("room"),
   off: V("off"), offLine: V("off-line"), label: V("label"), select: V("select"),
-  onAccent: V("on-accent"), amber: V("amber"),
+  onAccent: V("on-accent"), amber: V("amber"), cyan: V("cyan"), text: V("text"),
 };
 const KIND_COLOR = { drop: V("drop"), build: V("amber"), calm: V("calm") };
 function sectionAt(t) { return show.sections.find((s) => s.start <= t && t < s.end); }
@@ -386,6 +398,8 @@ async function loadShow(name, keepTime) {
   nFrames = Math.floor(frames.length / (nCh * 3));
   wholeImg = null;
   if (selected !== null && selected >= nCh) selected = null;
+  if (changedSong || (selCue !== null && selCue >= show.cues.length)) selCue = null;
+  packCues();
   layoutRoom();
   banner(show.warnings.length ? "Warnings:\n" + show.warnings.join("\n") : "", "warn");
   $("songinfo").textContent = (show.based_on ? `based on ${show.based_on} · ` : "") +
@@ -496,8 +510,9 @@ function drawRoom(fi) {
     ctx.beginPath(); ctx.arc(x, y, g.r, 0, Math.PI * 2);
     ctx.fillStyle = l < 0.02 ? C.off : `rgb(${col[0]},${col[1]},${col[2]})`;
     ctx.fill();
-    ctx.lineWidth = i === selected ? 3 : 1;
-    ctx.strokeStyle = i === selected ? "#ffffff" : C.offLine;
+    const inCue = selCue !== null && show.cues[selCue].lights.includes(c.id);
+    ctx.lineWidth = i === selected || inCue ? 3 : 1;
+    ctx.strokeStyle = i === selected ? "#ffffff" : inCue ? C.cyan : C.offLine;
     ctx.stroke();
     ctx.font = (i === selected ? "600 " : "") + "11px system-ui, sans-serif";
     const ly = disp[i].above ? y - g.r - 7 : y + g.r + 14, label = c.name || `#${c.id}`;
@@ -637,6 +652,66 @@ function heatmap(w, t0, t1) {
   return cv;
 }
 
+// Cues overlap in time, so each gets the first lane that is free when it starts.
+function packCues() {
+  const ends = [];
+  for (const c of [...show.cues].sort((a, b) => a.start - b.start || a.index - b.index)) {
+    let lane = ends.findIndex((e) => e <= c.start + 1e-6);
+    if (lane < 0) lane = ends.length;
+    ends[lane] = c.end;
+    c.lane = lane;
+  }
+  nLanes = ends.length;
+}
+const cuesTop = () => TOP + nCh * ROW_H + 22;
+const cuesH = () => nLanes * (CUE_H + CUE_GAP);
+
+function drawCues(ctx, X, t0, t1, plotW) {
+  const top = cuesTop(), selId = selected !== null ? show.channels[selected].id : null;
+  ctx.font = "11px system-ui, sans-serif"; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+  ctx.fillStyle = C.muted; ctx.fillText(`cues (${show.cues.length})`, 10, top + CUE_H / 2);
+  ctx.fillStyle = C.room; ctx.fillRect(LABEL_W, top, plotW, cuesH());
+  ctx.fillStyle = "rgba(255,255,255,0.14)";
+  for (const s of show.sections) if (s.start >= t0 && s.start <= t1) ctx.fillRect(X(s.start), top, 1, cuesH());
+
+  for (const c of show.cues) {
+    if (c.end < t0 || c.start > t1) continue;
+    const a = Math.max(X(c.start), LABEL_W), b = Math.min(X(c.end), LABEL_W + plotW);
+    const y = top + c.lane * (CUE_H + CUE_GAP), w = Math.max(2, b - a - 1);
+    const picked = c.index === selCue;
+    const dim = selId !== null && !c.lights.includes(selId) && !picked ? 0.3 : 1;  // not on the selected light
+    // tinted body, with the cue's colors as a strip along the top
+    ctx.globalAlpha = 0.32 * dim; ctx.fillStyle = c.colors[0] || C.offLine; ctx.fillRect(a, y, w, CUE_H);
+    ctx.globalAlpha = dim;
+    if (c.colors.length) c.colors.forEach((col, i) => {
+      ctx.fillStyle = col;
+      ctx.fillRect(a + i * w / c.colors.length, y, w / c.colors.length, 3);
+    }); else { ctx.fillStyle = C.offLine; ctx.fillRect(a, y, w, 3); }
+    if (w > 28) {
+      ctx.save(); ctx.beginPath(); ctx.rect(a, y, w - 2, CUE_H); ctx.clip();
+      ctx.fillStyle = C.text; ctx.fillText(c.label, a + 4, y + CUE_H / 2 + 2);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    if (picked) { ctx.strokeStyle = C.cyan; ctx.lineWidth = 2; ctx.strokeRect(a, y, w, CUE_H); }
+  }
+}
+
+function hitCue(p) {
+  const lane = Math.floor((p.y - cuesTop()) / (CUE_H + CUE_GAP));
+  if (p.x < LABEL_W || lane < 0 || lane >= nLanes) return null;
+  const [t0, t1] = view(), tol = 3 / (tlCv.clientWidth - LABEL_W - 12) * (t1 - t0);  // short bars stay clickable
+  let best = null, bd = Infinity;
+  for (const c of show.cues) {
+    if (c.lane !== lane) continue;
+    const d = Math.max(c.start - p.t, p.t - c.end, 0);
+    if (d <= tol && d < bd) { bd = d; best = c; }
+  }
+  return best;
+}
+
+const barPos = (t) => { const [b, bt] = barBeat(t); return t < fb() - 1e-3 ? "before bar 1" : `${b}.${bt}`; };
+
 function drawTimeline(t) {
   const ctx = tlCv.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
@@ -723,24 +798,33 @@ function drawTimeline(t) {
 
   // labels (with the current color as a swatch)
   const fi = frameAt(t);
+  const cue = selCue !== null ? show.cues[selCue] : null;
   ctx.font = "12px system-ui, sans-serif"; ctx.textAlign = "left";
   show.channels.forEach((c, i) => {
     const y = rowsTop + i * ROW_H;
     if (i === selected) { ctx.fillStyle = C.select; ctx.fillRect(0, y, LABEL_W + plotW, ROW_H); ctx.drawImage(img, 0, i, img.width, 1, LABEL_W, y + 2, plotW, ROW_H - 4); }
-    const col = color(fi, i);
+    const col = color(fi, i), inCue = cue && cue.lights.includes(c.id);
+    if (inCue && cue.end >= t0 && cue.start <= t1) {  // outline the part of this row the cue drives
+      const a = Math.max(X(cue.start), LABEL_W), b = Math.min(X(cue.end), LABEL_W + plotW);
+      ctx.strokeStyle = C.cyan; ctx.lineWidth = 1.5; ctx.strokeRect(a, y + 1, Math.max(2, b - a), ROW_H - 2);
+    }
     ctx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`; ctx.fillRect(10, y + 5, 12, 12);
     ctx.strokeStyle = C.offLine; ctx.lineWidth = 1; ctx.strokeRect(10.5, y + 5.5, 11, 11);
-    ctx.fillStyle = i === selected ? "#ffffff" : C.label;
+    ctx.fillStyle = i === selected ? "#ffffff" : inCue ? C.cyan : C.label;
     let name = c.name || `#${c.id}`;
     while (ctx.measureText(name).width > LABEL_W - 40 && name.length > 3) name = name.slice(0, -2) + "…";
     ctx.fillText(name, 30, y + ROW_H / 2 + 1);
   });
 
+  drawCues(ctx, X, t0, t1, plotW);
+  const bottom = cuesTop() + cuesH();
+
   // hover readout
   if (hoverX !== null && hoverX > LABEL_W) {
     const ht = t0 + (hoverX - LABEL_W) / plotW * (t1 - t0);
-    ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.fillRect(hoverX, rowsTop, 1, rowsH);
+    ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.fillRect(hoverX, rowsTop, 1, bottom - rowsTop);
     const [b, bt] = barBeat(ht), s = sectionAt(ht);
+    const hc = hitCue({ x: hoverX, y: hoverY, t: ht });
     let note = "";
     if (notes) {  // nearest detected sound within a few pixels
       const tol = 6 / plotW * (t1 - t0);
@@ -748,7 +832,8 @@ function drawTimeline(t) {
       for (const n of notes) if (Math.abs(n.t - ht) <= tol && (!best || Math.abs(n.t - ht) < Math.abs(best.t - ht))) best = n;
       if (best) note = ` · sound ${noteNames[best.pc]} at ${fmt(best.t)}`;
     }
-    const txt = `${fmt(ht)} · bar ${b}.${bt}${s ? " · " + s.name : ""}${note}`;
+    const txt = hc ? `${hc.label} · ${hc.effect} · bar ${barPos(hc.start)} → ${barPos(hc.end)}`
+                   : `${fmt(ht)} · bar ${b}.${bt}${s ? " · " + s.name : ""}${note}`;
     ctx.font = "11px system-ui, sans-serif"; ctx.textAlign = "right"; ctx.fillStyle = "#ffffff";
     ctx.fillText(txt, LABEL_W + plotW, rowsTop + rowsH + 12);
   }
@@ -756,7 +841,7 @@ function drawTimeline(t) {
   // playhead
   if (t >= t0 && t <= t1) {
     const x = X(t);
-    ctx.fillStyle = "#ffffff"; ctx.fillRect(x - 1, 6, 2, rowsTop + rowsH - 6);
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(x - 1, 6, 2, bottom - 6);
     ctx.beginPath(); ctx.moveTo(x - 6, 2); ctx.lineTo(x + 6, 2); ctx.lineTo(x, 9); ctx.fill();
   }
 }
@@ -769,6 +854,11 @@ function tlTime(e) {
 tlCv.addEventListener("mousedown", (e) => {
   if (!show) return;
   const p = tlTime(e);
+  if (p.y >= cuesTop() - 4) {  // cue lanes: select (or clear, on an empty spot); never seeks
+    const c = hitCue(p);
+    selCue = c ? c.index : null;
+    return;
+  }
   if (p.x < LABEL_W) {
     const row = Math.floor((p.y - TOP) / ROW_H);
     if (row >= 0 && row < nCh) selected = row === selected ? null : row;
@@ -776,13 +866,57 @@ tlCv.addEventListener("mousedown", (e) => {
   }
   dragging = true; seek(p.t);
 });
-tlCv.addEventListener("mousemove", (e) => { if (!show) return; const p = tlTime(e); hoverX = p.x; if (dragging) seek(p.t); });
+tlCv.addEventListener("dblclick", (e) => {
+  if (!show || !hitCue(tlTime(e))) return;
+  const link = $("cueOpen");
+  if (link) link.click();
+});
+tlCv.addEventListener("mousemove", (e) => {
+  if (!show) return;
+  const p = tlTime(e);
+  hoverX = p.x; hoverY = p.y;
+  tlCv.style.cursor = hitCue(p) ? "pointer" : p.y >= cuesTop() - 4 ? "default" : "";
+  if (dragging) seek(p.t);
+});
 tlCv.addEventListener("mouseleave", () => { hoverX = null; });
 window.addEventListener("mouseup", () => { dragging = false; });
 
 // ------------------------------------------------------------ info panel
-let lastInfo = "";
+let lastInfo = "", lastCue = null;
+function updateCueInfo() {
+  const c = selCue !== null ? show.cues[selCue] : null;
+  const key = JSON.stringify(c) + gridOffset;
+  if (key === lastCue) return;
+  lastCue = key;
+  const box = $("cueInfo");
+  box.innerHTML = "";
+  if (!c) { box.textContent = "Click a cue on the timeline."; return; }
+  const name = document.createElement("b"); name.textContent = c.label;
+  const fx = document.createElement("span"); fx.className = "fx"; fx.textContent = c.effect;
+  const byId = new Map(show.channels.map((ch) => [ch.id, ch.name || `#${ch.id}`]));
+  const lights = c.lights.length === nCh ? `all ${nCh} lights` :
+    !c.lights.length ? "no lights" : c.lights.map((id) => byId.get(id)).join(", ");
+  const br = () => document.createElement("br");
+  box.append(name, " · ", fx, br(),
+    `${fmt(c.start)} → ${fmt(c.end)}`, br(),
+    `bar ${barPos(c.start)} → ${barPos(c.end)}`, br(),
+    lights, br());
+  for (const col of c.colors) {
+    const sw = document.createElement("span"); sw.className = "swatch"; sw.style.background = col;
+    box.append(sw);
+  }
+  box.append(`${c.blend}${c.intensity !== 1 ? " · intensity " + c.intensity : ""}`, br());
+  if (c.file !== show.name + ".yaml") box.append("inherited from the base file", br());
+  const link = document.createElement("a");
+  link.id = "cueOpen";
+  link.href = `vscode://file/${encodeURI(c.path.replace(/^\//, ""))}${c.line ? ":" + c.line : ""}`;
+  link.textContent = `Open ${c.file}${c.line ? ":" + c.line : ""}`;
+  link.title = "Open this cue in VS Code (or double-click the cue)";
+  box.append(link);
+}
+
 function updateInfo(t) {
+  updateCueInfo();
   const [b, bt] = barBeat(t), s = sectionAt(t);
   $("clock").textContent = fmt(t);
   $("pos").textContent = t < fb() - 1e-3 ? "before bar 1" : `bar ${b} · beat ${bt}`;
@@ -793,14 +927,16 @@ function updateInfo(t) {
 
   const selId = selected !== null ? show.channels[selected].id : null;
   const active = show.cues.filter((c) => c.start <= t && t < c.end);
-  const key = active.map((c) => c.label + c.start).join("|") + "#" + selId;
+  const key = active.map((c) => c.index).join("|") + "#" + selId + "#" + selCue + "#" + show.mtime;
   if (key !== lastInfo) {
     lastInfo = key;
     const ul = $("active"); ul.innerHTML = "";
     if (!active.length) { const li = document.createElement("li"); li.textContent = "none"; ul.appendChild(li); }
     for (const c of active) {
       const li = document.createElement("li");
-      if (selId !== null && c.lights.includes(selId)) li.className = "hit";
+      if (selId !== null && c.lights.includes(selId)) li.classList.add("hit");
+      if (c.index === selCue) li.classList.add("picked");
+      li.onclick = () => { selCue = c.index; };
       const a = document.createElement("span"); a.className = "fx"; a.textContent = c.label;
       const n = document.createElement("span"); n.className = "n";
       n.textContent = `${c.lights.length === nCh ? "all" : c.lights.length} light${c.lights.length > 1 ? "s" : ""} · ${c.blend}`;
@@ -832,7 +968,7 @@ function setBuffer(cv, w, h) {
 }
 function resize() {
   if (show) {
-    const h = TOP + nCh * ROW_H + 22;
+    const h = cuesTop() + cuesH() + 10;
     if (tlCv.style.height !== h + "px") tlCv.style.height = h + "px";
     if (setBuffer(tlCv, tlCv.clientWidth, h)) wholeImg = null;
   }
@@ -1044,6 +1180,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.code === "ArrowRight") { e.preventDefault(); seek(now() + 4 * beatLen()); }
   else if (e.code === "ArrowLeft") { e.preventDefault(); seek(now() - 4 * beatLen()); }
   else if (e.code === "Home") { seek(0); }
+  else if (e.code === "Escape") { selCue = null; }
   else if (metro && e.key === "[") { e.preventDefault(); nudgeGrid(-10); }
   else if (metro && e.key === "]") { e.preventDefault(); nudgeGrid(+10); }
 });
@@ -1071,6 +1208,7 @@ setInterval(async () => {
   if (name) {
     await loadShow(name, false);
     if (show && !isNaN(t0)) seek(t0);
+    if (show && show.cues[+params.get("cue")] && params.has("cue")) selCue = +params.get("cue");
     if (show && show.editable && params.get("edit") === "1") setEditing(true);
   } else banner("No presets found in the presets folder.", "error");
   requestAnimationFrame(loop);

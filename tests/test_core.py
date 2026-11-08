@@ -193,9 +193,58 @@ def test_studio_render_show():
     frames = base64.b64decode(d["frames"])
     assert len(frames) == (int(d["duration"] * 10) + 1) * n_ch * 3
     assert {s["name"] for s in d["sections"]} >= {"intro", "drop1", "drop2"}
-    assert all(set(c) >= {"label", "start", "end", "lights"} for c in d["cues"])
+    assert all(set(c) >= {"index", "label", "start", "end", "lights", "colors", "file", "path", "line"} for c in d["cues"])
+    assert all(c["file"] == "spotless.yaml" and c["line"] > 0 for c in d["cues"])
     with pytest.raises(studio.NotFound):
         studio.preset_file("../config")
+
+
+def test_cues_know_their_file_and_line(tmp_path):
+    base = tmp_path / "base.yaml"
+    base.write_text(
+        "track: {bpm: 120}\n"            # line 1
+        "cues:\n"
+        "  # a comment\n"
+        "  - at: 0\n"                    # line 4
+        "    dur: 1\n"
+        "    effect: solid\n"
+        "  - {at: 1, dur: 1, effect: blackout}\n",  # line 7
+        encoding="utf-8",
+    )
+    assert [(c.source, c.line) for c in preset.load(base).cues] == [(base, 4), (base, 7)]
+
+    # no `cues:` of its own: every cue is the base's
+    same = tmp_path / "same.yaml"
+    same.write_text("based_on: base\n", encoding="utf-8")
+    assert [(c.source, c.line) for c in preset.load(same).cues] == [(base, 4), (base, 7)]
+
+    # inherit_cues: the base's cues, then its own
+    extra = tmp_path / "extra.yaml"
+    extra.write_text("based_on: base\ninherit_cues: true\ncues:\n  - {at: 2, dur: 1, effect: solid}\n", encoding="utf-8")
+    assert [(c.source, c.line) for c in preset.load(extra).cues] == [(base, 4), (base, 7), (extra, 4)]
+
+    # own cues replace the base's
+    own = tmp_path / "own.yaml"
+    own.write_text("based_on: base\ncues:\n  - {at: 2, dur: 1, effect: solid}\n", encoding="utf-8")
+    assert [(c.source, c.line) for c in preset.load(own).cues] == [(own, 3)]
+
+
+def test_studio_cue_colors(tmp_path):
+    from huemusic import studio
+
+    path = tmp_path / "x.yaml"
+    path.write_text(
+        "track: {bpm: 120}\n"
+        "cues:\n"
+        "  - {at: 0, dur: 1, effect: pulse, colors: [red, blue, red]}\n"
+        "  - {at: 0, dur: 1, effect: fade, from: black, to: white}\n"
+        "  - {at: 0, dur: 1, effect: strobe, color: green, background: blue}\n"
+        "  - {at: 0, dur: 1, effect: blackout}\n",
+        encoding="utf-8",
+    )
+    assert [studio.cue_colors(c) for c in preset.load(path).cues] == [
+        ["#ff0000", "#0000ff"], ["#ffffff"], ["#00ff00"], [],
+    ]
 
 
 def test_studio_save_positions_is_local(tmp_path, monkeypatch):

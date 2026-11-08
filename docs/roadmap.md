@@ -40,7 +40,7 @@ The list below is grouped by area, with my estimate of value and effort. ★ = w
 
 | # | Enhancement | Why | Effort |
 |---|---|---|---|
-| ★9 | **Cue lanes on the timeline.** Each cue drawn as a bar under the sections. Click a cue to highlight its lights, and **open the YAML at that line** in VS Code (`vscode://file/...:line`). | Links "what I see" to "what to edit". It's the biggest current gap. | S–M |
+| ★9 | ✅ **Done (2026-11-08).** **Cue lanes on the timeline.** Each cue drawn as a bar under the sections. Click a cue to highlight its lights, and **open the YAML at that line** in VS Code (`vscode://file/...:line`). | Links "what I see" to "what to edit". It's the biggest current gap. | S–M |
 | 10 | **Quick cue editing in the page:** change color, intensity, effect parameters or start/end from a side panel, with a safe write-back like `append_cue`. Drag section boundaries. | Common tweaks without the editor. | L |
 | 11 | **Loop a range (A–B)** plus zoom/scroll shortcuts. | Iterating on a 4-bar passage. | S |
 | 12 | **Automatic backups:** every studio write (append-cue, positions, grid nudge) keeps a copy in `presets/.history/`, with a one-level undo button. | Safety now that the page edits files. | S |

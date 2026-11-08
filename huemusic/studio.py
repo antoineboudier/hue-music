@@ -91,6 +91,22 @@ def preset_mtime(name: str) -> float:
     return max(f.stat().st_mtime for f in files if f.exists())
 
 
+def cue_colors(cue) -> list[str]:
+    """The colors a cue uses, for its bar on the timeline (without black and backgrounds)."""
+    if cue.effect.name == "rainbow":
+        return ["#ff0000", "#ffff00", "#00ff00", "#00ffff", "#0000ff", "#ff00ff"]
+    out: list[str] = []
+    for key, (kind, _) in cue.effect.PARAMS.items():
+        value = cue.effect.p.get(key)
+        if key == "background" or value is None or kind not in ("color", "colors"):
+            continue
+        for rgb in [value] if kind == "color" else value:
+            css = "#%02x%02x%02x" % tuple(round(v * 255) for v in rgb)
+            if css != "#000000" and css not in out:
+                out.append(css)
+    return out
+
+
 def render_show(name: str, fps: int = FPS) -> dict:
     """Render a whole preset to frames: bytes [frame][channel][r, g, b]."""
     path = preset_file(name)
@@ -128,8 +144,10 @@ def render_show(name: str, fps: int = FPS) -> dict:
         "channels": [{"id": c.id, "name": c.name.strip(), "x": c.x, "y": c.y, "z": c.z} for c in order],
         "sections": [{"name": k, "start": a, "end": min(b, end)} for k, (a, b) in preset.sections.items()],
         "cues": [
-            {"label": cue.label, "effect": cue.effect.name, "start": cue.start, "end": cue.end,
-             "blend": cue.blend, "lights": [c.id for c in chs]}
+            {"index": cue.index, "label": cue.label, "effect": cue.effect.name, "start": cue.start, "end": cue.end,
+             "blend": cue.blend, "intensity": cue.intensity, "lights": [c.id for c in chs],
+             "colors": cue_colors(cue), "file": cue.source.name, "path": cue.source.resolve().as_posix(),
+             "line": cue.line}
             for cue, chs in show.cue_targets
         ],
         "warnings": show.warnings,
