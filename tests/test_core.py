@@ -349,6 +349,18 @@ def test_studio_live_streams_and_times_out(monkeypatch):
     assert live.update("spotless", 0, False, 1, 0) == {"on": False, "error": live.error}
 
 
+def test_studio_set_first_beat_writes_where_the_header_lives(tmp_path, monkeypatch):
+    from huemusic import studio
+
+    monkeypatch.setattr(config, "PRESETS_DIR", tmp_path)
+    (tmp_path / "base.yaml").write_text(
+        "track:\n  bpm: 120\n  first_beat: 0.5     # bar 1 beat 1\ncues: []\n")
+    (tmp_path / "v2.yaml").write_text("based_on: base\ncues: []\n")
+    assert studio.set_first_beat("v2", 0.54) == {"first_beat": 0.54, "file": "base.yaml"}
+    assert "first_beat: 0.54     # bar 1 beat 1" in (tmp_path / "base.yaml").read_text()  # comment kept
+    assert preset.load(tmp_path / "v2.yaml").grid.first_beat == 0.54
+
+
 def test_write_spotify_uri(tmp_path):
     p = tmp_path / "x.yaml"
     p.write_text("track:\n  spotify_uri:              # filled automatically\n  bpm: 1\n")

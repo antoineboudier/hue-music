@@ -22,7 +22,7 @@ The list below is grouped by area, with my estimate of value and effort. ★ = w
 
 | # | Enhancement | Why | Effort |
 |---|---|---|---|
-| ★1 | **Metronome / grid check in the studio.** Optional click on every beat (accent on bar 1), mixed with the song. A "grid ±10 ms" nudge updates `first_beat` in the preset. | Makes a wrong grid audible in 5 seconds (the Désenchantée 3000 half-16th issue) and fixable without code. | S |
+| ★1 | ✅ **Done (2026-11-07).** **Metronome / grid check in the studio.** Optional click on every beat (accent on bar 1), mixed with the song. A "grid ±10 ms" nudge updates `first_beat` in the preset. | Makes a wrong grid audible in 5 seconds (the Désenchantée 3000 half-16th issue) and fixable without code. | S |
 | 2 | **Grid validation in `analyze`.** Measure the kick and transient offset against the fitted grid in several sections, warn when it's above 20 ms, and report a confidence for the bar-1 choice. | Catches the problems we found by hand, before writing a preset. | S–M |
 | 3 | **Latency calibration.** Lights flash on beats and you tap with them; the median offset is saved as the device latency. Works in `play` and in the studio's real-lights mode. | Replaces trial and error with `+`/`-`. | S |
 | 4 | **Spotify in the studio.** A source selector (MP3 / Spotify device), reusing `SpotifyClock`. | You can tune on the real speaker, at its real latency. | M |

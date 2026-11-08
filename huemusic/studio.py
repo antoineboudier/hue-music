@@ -22,6 +22,7 @@ Endpoints (all local):
   GET  /api/notes?preset=x    detected sounds (start time, strength, pitch class), cached
   POST /api/append-cue        append a cue (from tap recording) to a preset file
   POST /api/live/start|state|stop   drive the real lights from the page's playback
+  POST /api/grid              save a nudged beat grid (track.first_beat)
 """
 from __future__ import annotations
 
@@ -234,6 +235,35 @@ def append_cue(name: str, snippet: str) -> dict:
     return {"cues": after}
 
 
+def set_first_beat(name: str, first_beat: float) -> dict:
+    """Change the beat grid's start (track.first_beat), keeping the file's comments.
+
+    For a variant, the value lives where the track header is defined: the
+    first file (variant, then its bases) that sets `first_beat`. The preset
+    is re-loaded afterwards and the file restored if it no longer loads.
+    """
+    import yaml
+
+    preset = load(preset_file(name))
+    target = next((f for f in preset.files
+                   if "first_beat" in ((yaml.safe_load(f.read_text(encoding="utf-8")) or {}).get("track") or {})),
+                  None)
+    if target is None:
+        raise NotFound("no track.first_beat found in this preset or its base")
+    original = target.read_text(encoding="utf-8")
+    value = round(float(first_beat), 4)
+    new, n = re.subn(r"(?m)^(\s*first_beat:\s*)-?[\d.]+", rf"\g<1>{value}", original, count=1)
+    if not n:
+        raise NotFound(f"couldn't find a `first_beat:` line in {target.name}")
+    target.write_text(new, encoding="utf-8")
+    try:
+        load(preset_file(name))
+    except PresetError:
+        target.write_text(original, encoding="utf-8")
+        raise
+    return {"first_beat": value, "file": target.name}
+
+
 class Live:
     """Drives the real lights from the studio page.
 
@@ -436,6 +466,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/push-positions": lambda: push_positions(),
             "/api/identify": lambda: identify(int(body()["channel"])),
             "/api/append-cue": lambda: (lambda b: append_cue(b["preset"], b["yaml"]))(body()),
+            "/api/grid": lambda: (lambda b: set_first_beat(b["preset"], b["first_beat"]))(body()),
             "/api/live/start": lambda: LIVE.start(body()["preset"]),
             "/api/live/state": lambda: (lambda b: LIVE.update(b["preset"], b["t"], b["playing"],
                                                               b.get("rate", 1), b.get("offset", 0)))(body()),

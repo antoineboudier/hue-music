@@ -62,6 +62,18 @@ Typical shapes in dance music:
 Sections almost always last **4, 8 or 16 bars**. If you find a 7-bar
 section, look again: one of its edges is probably a bar off.
 
+### Check the grid by ear
+
+The quickest check is the studio's **♩ Metronome**:
+1. Play a drop, which has a clear kick, and listen to the clicks.
+2. If they flam against the kick (a doubled "t-tock"), nudge the grid with
+   **−10 / +10 ms** (or `[` `]`) until they merge into one sound.
+3. Click **Save grid**, which writes `track.first_beat` into the preset.
+
+The accented click must land where the section changes: a drop starts on
+an accent. If the accent falls elsewhere, the bar alignment is off. The
+next section explains how to fix it.
+
 ### Check that the bars are aligned
 
 The analyzer picks the bar-1 alignment automatically, and it's right on

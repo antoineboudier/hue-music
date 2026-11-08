@@ -102,6 +102,10 @@
   #toast.show { opacity: 1; }
   #liveBtn.on { background: var(--amber); border-color: var(--amber); color: var(--on-accent); font-weight: 600; }
   #liveDelay { width: 64px; font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+  #metroBtn.on { background: var(--cyan); border-color: var(--cyan); color: var(--on-accent); font-weight: 600; }
+  .grid-tools { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  #gridVal { min-width: 64px; text-align: center; font-family: ui-monospace, Consolas, monospace; color: var(--text); }
+  #gridVal.changed { color: var(--amber); }
   #recBtn.on { background: var(--err); border-color: var(--err); color: var(--on-accent); font-weight: 600; }
   #hint.rec { color: var(--err); font-weight: 600; }
   dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 20px; max-width: min(720px, 92vw); }
@@ -171,6 +175,14 @@
       <option value="16">4 bars</option><option value="8">2 bars</option>
     </select>
   </label>
+  <button id="metroBtn" title="Click on every beat of the grid (accent on beat 1) to check it against the music">♩ Metronome</button>
+  <span id="gridTools" class="grid-tools" hidden>
+    <span>Grid</span>
+    <button id="gridMinus" title="Move the grid 10 ms earlier ( [ key )">−10 ms</button>
+    <span id="gridVal">±0 ms</span>
+    <button id="gridPlus" title="Move the grid 10 ms later ( ] key )">+10 ms</button>
+    <button id="gridSave" class="primary" disabled title="Write the new first_beat into the preset">Save grid</button>
+  </span>
   <button id="recBtn" title="Tap keys in time with the music to write a sequence pattern">● Record taps</button>
   <label>Snap
     <select id="snap">
@@ -215,6 +227,7 @@ let editing = false;     // position edit mode
 let drag = null;         // light being dragged in edit mode
 let notes = null, noteNames = [], notesMsg = "";  // detected sounds
 let recording = false, taps = [];                 // tap recording
+let gridOffset = 0;                               // unsaved grid nudge, seconds
 
 // ------------------------------------------------------------ utilities
 const fmt = (t, dec = 2) => {
@@ -223,8 +236,9 @@ const fmt = (t, dec = 2) => {
   return `${m}:${s.toFixed(dec).padStart(dec ? dec + 3 : 2, "0")}`;
 };
 const beatLen = () => 60 / show.bpm;
+const fb = () => show.first_beat + gridOffset;   // grid start, including an unsaved nudge
 function barBeat(t) {
-  const n = Math.floor((t - show.first_beat) / beatLen() + 1e-6);
+  const n = Math.floor((t - fb()) / beatLen() + 1e-6);
   return [Math.floor(n / 4) + 1, ((n % 4) + 4) % 4 + 1];
 }
 function sectionKind(name) {
@@ -272,6 +286,7 @@ function seek(t) {
   t = Math.max(0, Math.min(show ? show.duration : 0, t));
   anchorT = t; anchorWall = performance.now(); lastAudio = t;
   if (show && show.audio) audio.currentTime = t;
+  if (typeof resetClicks === "function" && actx) resetClicks();
   liveState();
 }
 function setPlaying(p) {
@@ -285,6 +300,7 @@ function setPlaying(p) {
     if (p) { audio.currentTime = t; audio.play().catch((e) => { toast("Audio couldn't start: " + e.message); }); }
     else audio.pause();
   }
+  if (actx) resetClicks();
   liveState();
 }
 
@@ -381,6 +397,7 @@ async function loadShow(name, keepTime) {
     else { audio.removeAttribute("src"); audio.load(); }
     history.replaceState(null, "", "?preset=" + encodeURIComponent(name));
     taps = [];
+    if (gridOffset) { gridOffset = 0; nudgeGrid(0); }  // a nudge belongs to the previous song
     loadNotes(name);
   }
   seek(Math.min(t, show.duration));
@@ -645,9 +662,9 @@ function drawTimeline(t) {
   ctx.fillStyle = C.room; ctx.fillRect(LABEL_W, LANE_Y, plotW, LANE_H);
   if (pxBeat >= 8) {  // beat grid (16ths too when zoomed in a lot)
     const sub = pxBeat >= 48 ? 0.25 : 1;
-    const first = Math.ceil((t0 - show.first_beat) / bl0 / sub) * sub;
-    for (let b = first; show.first_beat + b * bl0 <= t1; b += sub) {
-      const x = X(show.first_beat + b * bl0), onBar = Math.abs(b / 4 - Math.round(b / 4)) < 1e-6;
+    const first = Math.ceil((t0 - fb()) / bl0 / sub) * sub;
+    for (let b = first; fb() + b * bl0 <= t1; b += sub) {
+      const x = X(fb() + b * bl0), onBar = Math.abs(b / 4 - Math.round(b / 4)) < 1e-6;
       const onBeat = Math.abs(b - Math.round(b)) < 1e-6;
       ctx.fillStyle = onBar ? "rgba(255,255,255,0.28)" : onBeat ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)";
       ctx.fillRect(x, LANE_Y, 1, LANE_H);
@@ -693,9 +710,9 @@ function drawTimeline(t) {
   const bl = beatLen(), pxBar = 4 * bl / (t1 - t0) * plotW;
   const step = [1, 2, 4, 8, 16, 32].find((s) => s * pxBar >= 48) || 64;
   ctx.font = "10px ui-monospace, Consolas, monospace"; ctx.textAlign = "left";
-  const firstBar = Math.max(1, Math.floor((t0 - show.first_beat) / (4 * bl)) + 1);
+  const firstBar = Math.max(1, Math.floor((t0 - fb()) / (4 * bl)) + 1);
   for (let bar = firstBar; ; bar++) {
-    const tb = show.first_beat + (bar - 1) * 4 * bl;
+    const tb = fb() + (bar - 1) * 4 * bl;
     if (tb > t1) break;
     if (tb < t0) continue;
     const x = X(tb);
@@ -768,7 +785,7 @@ let lastInfo = "";
 function updateInfo(t) {
   const [b, bt] = barBeat(t), s = sectionAt(t);
   $("clock").textContent = fmt(t);
-  $("pos").textContent = t < show.first_beat - 1e-3 ? "before bar 1" : `bar ${b} · beat ${bt}`;
+  $("pos").textContent = t < fb() - 1e-3 ? "before bar 1" : `bar ${b} · beat ${bt}`;
   $("time").textContent = `${fmt(t, 0)} / ${fmt(show.duration, 0)}`;
   const chip = $("section");
   if (s) { chip.hidden = false; chip.textContent = s.name; chip.style.background = KIND_COLOR[sectionKind(s.name)]; }
@@ -840,7 +857,7 @@ function loop() {
 
 // ------------------------------------------------------------ controls
 $("play").onclick = () => { if (show) { if (!playing && now() >= show.duration - 0.05) seek(0); setPlaying(!playing); } };
-$("speed").onchange = (e) => { const t = now(); rate = +e.target.value; audio.playbackRate = rate; anchorT = t; anchorWall = performance.now(); liveState(); };
+$("speed").onchange = (e) => { const t = now(); rate = +e.target.value; audio.playbackRate = rate; anchorT = t; anchorWall = performance.now(); if (actx) resetClicks(); liveState(); };
 $("liveBtn").onclick = () => { if (show) setLive(!live); };
 try { $("liveDelay").value = localStorage.getItem("huemusic.liveDelay") || "0"; } catch (e) { /* storage unavailable */ }
 $("liveDelay").onchange = () => { try { localStorage.setItem("huemusic.liveDelay", $("liveDelay").value); } catch (e) {} liveState(); };
@@ -873,6 +890,87 @@ $("resetBtn").onclick = async () => {
   if (show.positions_modified && !confirm("Discard your local changes and reload the positions from the bridge?")) return;
   if (await post("/api/refresh-lights", {}, "Couldn't reach the bridge")) { toast("Positions reloaded from the bridge"); await loadShow(show.name, true); }
 };
+// ------------------------------------------------------------ metronome + grid nudge
+// The song is routed through the same Web Audio graph as the clicks, so both
+// leave the sound card with the same latency: if a click sounds off the beat,
+// the grid is off, not the audio path.
+let metro = false, actx = null, metroGain = null, metroTimer = null;
+let clickNodes = [], scheduledBeat = -Infinity;
+
+function ensureAudioGraph() {
+  if (actx) return;
+  actx = new (window.AudioContext || window.webkitAudioContext)();
+  actx.createMediaElementSource(audio).connect(actx.destination);
+  metroGain = actx.createGain();
+  metroGain.gain.value = 0.6;
+  metroGain.connect(actx.destination);
+}
+
+function click(when, accent) {
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.frequency.value = accent ? 1760 : 1175;
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(accent ? 1.0 : 0.5, when + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + 0.045);
+  o.connect(g).connect(metroGain);
+  o.start(when); o.stop(when + 0.05);
+  clickNodes.push(o);
+  o.onended = () => { clickNodes = clickNodes.filter((n) => n !== o); };
+}
+
+function resetClicks() {  // after a seek/pause/speed/grid change: drop clicks already queued
+  for (const o of clickNodes) { try { o.stop(); } catch (e) { /* already stopped */ } }
+  clickNodes = [];
+  scheduledBeat = -Infinity;
+}
+
+function metroTick() {  // schedule the clicks of the next ~200 ms (in song time)
+  if (!metro || !playing || !show || !actx) return;
+  const t = now(), bl = beatLen(), ahead = 0.2 * rate;
+  let n = Math.max(Math.ceil((t - fb()) / bl - 1e-6), scheduledBeat + 1, 0);
+  for (; fb() + n * bl <= t + ahead; n++) {
+    click(actx.currentTime + (fb() + n * bl - t) / rate, n % 4 === 0);
+    scheduledBeat = n;
+  }
+}
+
+async function setMetro(on) {
+  if (on) {
+    ensureAudioGraph();
+    if (actx.state === "suspended") await actx.resume();
+    metroTimer = setInterval(metroTick, 25);
+  } else {
+    clearInterval(metroTimer);
+    resetClicks();
+  }
+  metro = on;
+  $("metroBtn").classList.toggle("on", on);
+  $("gridTools").hidden = !on;
+}
+
+function nudgeGrid(ms) {
+  gridOffset = Math.round((gridOffset * 1000 + ms)) / 1000;
+  const v = Math.round(gridOffset * 1000);
+  $("gridVal").textContent = v === 0 ? "±0 ms" : `${v > 0 ? "+" : ""}${v} ms`;
+  $("gridVal").classList.toggle("changed", v !== 0);
+  $("gridSave").disabled = v === 0;
+  $("gridSave").title = v === 0 ? "Nothing to save" :
+    `first_beat ${show.first_beat.toFixed(4)} → ${fb().toFixed(4)} s (the lights move with it once saved)`;
+  resetClicks();
+}
+
+$("metroBtn").onclick = () => { if (show) setMetro(!metro); };
+$("gridMinus").onclick = () => nudgeGrid(-10);
+$("gridPlus").onclick = () => nudgeGrid(+10);
+$("gridSave").onclick = async () => {
+  const d = await post("/api/grid", { preset: show.name, first_beat: +fb().toFixed(4) }, "Couldn't save the grid");
+  if (d) {
+    toast(`Grid saved in ${d.file}: first_beat ${d.first_beat}`);
+    gridOffset = 0; nudgeGrid(0);
+    await loadShow(show.name, true);
+  }
+};
+
 // ------------------------------------------------------------ tap recording
 function setRecording(on) {
   recording = on;
@@ -890,7 +988,7 @@ const fmtNum = (v) => String(+v.toFixed(3));
 
 function buildPattern() {
   const step = +$("snap").value, bl = beatLen();
-  const slots = taps.map((tp) => ({ g: Math.round((tp.t - show.first_beat) / bl / step), tok: tp.tok }));
+  const slots = taps.map((tp) => ({ g: Math.round((tp.t - fb()) / bl / step), tok: tp.tok }));
   const g0 = Math.min(...slots.map((s) => s.g)), g1 = Math.max(...slots.map((s) => s.g));
   const toks = Array(g1 - g0 + 1).fill(".");
   for (const s of slots) {
@@ -946,6 +1044,8 @@ window.addEventListener("keydown", (e) => {
   else if (e.code === "ArrowRight") { e.preventDefault(); seek(now() + 4 * beatLen()); }
   else if (e.code === "ArrowLeft") { e.preventDefault(); seek(now() - 4 * beatLen()); }
   else if (e.code === "Home") { seek(0); }
+  else if (metro && e.key === "[") { e.preventDefault(); nudgeGrid(-10); }
+  else if (metro && e.key === "]") { e.preventDefault(); nudgeGrid(+10); }
 });
 
 // auto-reload when the preset file is saved

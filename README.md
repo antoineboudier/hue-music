@@ -87,6 +87,10 @@ This opens a page in your browser showing:
 
 You can play, pause, seek, slow down (down to 0.25×) and zoom in to a few bars. Click a light to see which cues drive it. Keep the page open while you edit a preset: it refreshes when you save.
 
+**Checking the beat grid:**
+- **♩ Metronome** clicks on every beat of the preset's grid, with an accent on beat 1, mixed with the song.
+- If the clicks are early or late against the kick, nudge the grid with **−10 / +10 ms** (or `[` `]`), then **Save grid** to write `first_beat` into the preset. The bar lines move as you nudge; the lights follow once you save.
+
 **Real lights:**
 - **Real lights: on** (top right) sends the show to your Hue lights, in sync with the page's playback, including when you pause, seek or slow down.
 - If the lights run ahead of the sound you hear, raise **delay** (Bluetooth: about 150–250 ms).
